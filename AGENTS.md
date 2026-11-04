@@ -75,7 +75,8 @@ WORKSHOP 2/                          ← Project root
 └── frontend/                        ← Next.js 16.4.5 App Router application (Vokal.ai)
     ├── package.json                 ← Dependencies & npm scripts
     ├── tailwind.config.ts           ← Tailwind v4 configuration
-    ├── next.config.ts               ← Next.js configuration (@tailwindcss/turbopack + redirects)
+    ├── next.config.ts               ← Next.js configuration (redirects, cacheComponents)
+    ├── postcss.config.mjs           ← PostCSS config (@tailwindcss/postcss for Tailwind v4)
     ├── tsconfig.json                ← TypeScript configuration
     │
     └── src/
@@ -106,9 +107,6 @@ WORKSHOP 2/                          ← Project root
         │   │   ├── DeviceSettingsModal.tsx  ← Hardware input selection & live mic level tester
         │   │   └── VisualNudge.tsx          ← Animated visual nudge alerts
         │   │
-        │   └── dashboard/           ← Shared dashboard component placeholders
-        │       └── index.ts
-        │
         ├── hooks/
         │   ├── useFaceMesh.ts       ← MediaPipe FaceLandmarker rAF inference loop
         │   ├── useMediaDevices.ts   ← Webcam & microphone enumeration + localStorage persistence
@@ -135,7 +133,7 @@ WORKSHOP 2/                          ← Project root
 | **Framer Motion** | ^14 | Animated visual nudges and micro-interactions |
 | **Lucide React** | ^1.52 | Icon library (used in WebcamFeed states) |
 | **Material Symbols** | CDN | Icon font for HUD overlays and buttons |
-| **Google Fonts** | CDN | Plus Jakarta Sans (headlines) + Manrope (body/telemetry) |
+| **Google Fonts** | CDN | IBM Plex Sans (UI) + IBM Plex Mono (telemetry) via `next/font/google` |
 
 ### Vision AI (Client-Side — Browser)
 | Technology | Version | Purpose |
@@ -206,7 +204,7 @@ WORKSHOP 2/                          ← Project root
 
 ## 6. Frontend Deep Dive
 
-### Entry Point: `src/app/page.tsx`
+### Entry Point: `src/app/(dashboard)/interview/page.tsx`
 The main `PracticeRoom` component owns all session state:
 - `isSessionActive` — starts/stops the interview timer and AI listening indicator
 - `isMicOn / isVideoOn` — controls for the bottom dock
@@ -247,7 +245,7 @@ The main `PracticeRoom` component owns all session state:
 - Reads `localStorage("theme")` on mount, falls back to OS `prefers-color-scheme`
 - Toggles `.dark` class on `<html>` element
 - Persists choice to `localStorage` on every toggle
-- Returned from `page.tsx` and passed down to `SessionHeader` for the toggle button
+- Returned from `page.tsx` (note: the redesigned UI is light-only; the hook is retained but not currently wired)
 
 ### Dark Mode Implementation
 The design system uses CSS custom properties in `globals.css`:
@@ -273,8 +271,8 @@ Full spec in [`DESIGN.md`](./DESIGN.md). Summary:
 | `--error` | `#ba1a1a` | `#ffb4ab` | Recording, warnings |
 
 ### Typography
-- **Headlines:** Plus Jakarta Sans (600–800 weight, tight tracking)
-- **Body / Telemetry:** Manrope (400–700 weight)
+- **UI & prose:** IBM Plex Sans
+- **Telemetry / IDs:** IBM Plex Mono (tabular-nums)
 - **Monospace metrics** (WPM, timers): `font-mono` via Tailwind
 
 ### Spacing
@@ -290,13 +288,12 @@ Full spec in [`DESIGN.md`](./DESIGN.md). Summary:
 
 ### ✅ Built & Working
 - [x] Full Practice Room layout (split-screen, responsive 12-col grid)
-- [x] `SessionHeader` with live timer, question counter, AI status, dark mode toggle
+- [x] `Sidebar` + `TopHeader` persistent app shell (replaced the old `SessionHeader`)
 - [x] `QuestionPrompt` — behavioral question card with recording indicator
 - [x] `StarChecklist` — STAR progress tracker (mock data, UI only)
 - [x] `LiveCoachingTip` — coaching callout card
 - [x] `CandidateVideoFeed` — 16:9 webcam with HUD overlays (mock metrics)
 - [x] `WebcamFeed` — real webcam via `getUserMedia`, HD 1280×720 constraints
-- [x] `DiagnosticsBar` — volume, clarity, confidence metrics (mock data)
 - [x] `ControlDock` — mic/video/session toggle controls
 - [x] `VisualNudge` — animated alert component (Framer Motion)
 - [x] `MediaPipeSetup.ts` — FaceLandmarker singleton init/destroy
@@ -322,7 +319,7 @@ Full spec in [`DESIGN.md`](./DESIGN.md). Summary:
 - [ ] REST API endpoints to feed transcript data back to Next.js frontend
 
 ### 🔲 TODO — Integration
-- [ ] Wire `DiagnosticsBar` metrics (volume consistency, clarity index) to live audio analysis
+- [ ] Wire live WPM / volume / clarity metrics to live audio analysis
 - [ ] Wire `StarChecklist` progress to live backend NLP output
 - [ ] Wire `LiveCoachingTip` to dynamic AI-generated coaching suggestions
 - [ ] Connect `ControlDock` mic toggle to actual audio stream on/off
@@ -415,8 +412,8 @@ If you are an AI agent working on this codebase, follow these rules:
 
 ### Current Mock Data Locations
 All the following are **currently fake/hardcoded** and need to be replaced with live data:
-- `metrics` state in `src/app/page.tsx` (lines ~46–56) — replace with MediaPipe + Whisper output
-- `starProgress` state in `src/app/page.tsx` (lines ~38–43) — replace with backend NLP output
+- `src/lib/mockSessions.ts` (Home + Reports) - replace with MongoDB/backend output
+- Mock STAR / metrics state in `src/app/(dashboard)/interview/page.tsx` - replace with MediaPipe + Whisper + NLP output
 - `LiveCoachingTip` tip prop in `page.tsx` — replace with dynamic AI suggestion
 
 ### Next Recommended Task
