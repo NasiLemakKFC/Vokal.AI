@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_blank" name="shell-type"/><link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;700&amp;family=Manrope:wght@400;500;700&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={"darkMode":"class","theme":{"extend":{"colors":{"surface":"#f8f9ff","tertiary-fixed":"#6ffbbe","outline":"#727785","on-background":"#0b1c30","on-surface-variant":"#424754","secondary-fixed":"#e2dfff","surface-tint":"#005ac2","on-primary":"#ffffff","on-tertiary-fixed":"#002113","inverse-primary":"#adc6ff","surface-variant":"#d3e4fe","error-container":"#ffdad6","primary-container":"#2170e4","on-primary-fixed-variant":"#004395","on-error":"#ffffff","tertiary-container":"#00855b","surface-container-low":"#eff4ff","primary-fixed-dim":"#adc6ff","outline-variant":"#c2c6d6","on-primary-fixed":"#001a42","on-secondary-fixed":"#0f0069","secondary":"#4b41e1","on-secondary":"#ffffff","surface-bright":"#f8f9ff","on-secondary-container":"#fffbff","surface-dim":"#cbdbf5","primary-fixed":"#d8e2ff","error":"#ba1a1a","inverse-surface":"#213145","tertiary-fixed-dim":"#4edea3","surface-container":"#e5eeff","surface-container-highest":"#d3e4fe","surface-container-lowest":"#ffffff","on-tertiary":"#ffffff","surface-container-high":"#dce9ff","on-tertiary-container":"#f5fff6","secondary-fixed-dim":"#c3c0ff","background":"#f8f9ff","on-primary-container":"#fefcff","on-surface":"#0b1c30","secondary-container":"#645efb","tertiary":"#006947","on-tertiary-fixed-variant":"#005236","primary":"#0058be","on-secondary-fixed-variant":"#3323cc","inverse-on-surface":"#eaf1ff","on-error-container":"#93000a"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-xl":"2rem","margin":"2rem","gutter-mobile":"1rem","space-xs":"0.25rem","space-md":"1rem","space-lg":"1.5rem","space-sm":"0.5rem","gutter":"1.5rem","space-2xl":"3rem","margin-mobile":"1rem"},"fontFamily":{"headline-md":["Plus Jakarta Sans"],"display":["Plus Jakarta Sans"],"label-md":["Manrope"],"headline-lg":["Plus Jakarta Sans"],"headline-sm":["Plus Jakarta Sans"],"headline-lg-mobile":["Plus Jakarta Sans"],"label-sm":["Manrope"],"body-sm":["Manrope"],"body-lg":["Manrope"],"code-metric":["Manrope"],"body-md":["Manrope"]},"fontSize":{"headline-md":["1.5rem",{"lineHeight":"2rem","letterSpacing":"-0.02em","fontWeight":"600"}],"display":["3.5rem",{"lineHeight":"4rem","letterSpacing":"-0.03em","fontWeight":"800"}],"label-md":["0.875rem",{"lineHeight":"1.25rem","letterSpacing":"0.01em","fontWeight":"600"}],"headline-lg":["2.25rem",{"lineHeight":"2.75rem","letterSpacing":"-0.025em","fontWeight":"700"}],"headline-sm":["1.25rem",{"lineHeight":"1.75rem","letterSpacing":"-0.015em","fontWeight":"600"}],"headline-lg-mobile":["1.75rem",{"lineHeight":"2.25rem","letterSpacing":"-0.02em","fontWeight":"700"}],"label-sm":["0.75rem",{"lineHeight":"1rem","letterSpacing":"0.02em","fontWeight":"600"}],"body-sm":["0.875rem",{"lineHeight":"1.25rem","fontWeight":"400"}],"body-lg":["1.125rem",{"lineHeight":"1.75rem","fontWeight":"400"}],"code-metric":["0.875rem",{"lineHeight":"1.25rem","letterSpacing":"-0.01em","fontWeight":"700"}],"body-md":["1rem",{"lineHeight":"1.5rem","fontWeight":"400"}]}}}};</script></head><body class="bg-surface font-body-md text-on-surface antialiased"><main class="w-full min-h-screen bg-surface"><div class="flex flex-col w-full">
+<!-- Top Utility Context Bar -->
+<div class="w-full bg-surface-container-low py-3 px-6 md:px-12 flex items-center justify-between">
+<div class="flex items-center gap-2 font-label-sm text-label-sm text-on-surface-variant">
+<span class="hover:text-primary transition-colors cursor-pointer">Candidate Dashboard</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="hover:text-primary transition-colors cursor-pointer">Mock Simulations</span>
+<span class="material-symbols-outlined text-[14px] text-outline">chevron_right</span>
+<span class="text-primary font-code-metric">Session #MY-8842-PREP</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-tertiary-container/10 text-tertiary font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+        Diagnostics Nominal
+      </div>
+<span class="font-code-metric text-label-sm text-outline">v2.4.1 Engine</span>
+</div>
+</div>
+<!-- Main Pre-Interview Stage -->
+<div class="w-full max-w-[1360px] mx-auto px-6 md:px-12 py-8 flex flex-col gap-8">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-2">
+<div>
+<div class="inline-flex items-center gap-2 mb-2">
+<span class="px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed font-code-metric text-label-sm">STAGE 01 : CALIBRATION</span>
+<span class="text-outline font-label-sm text-label-sm">Self-Paced Onboarding</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Interview Configuration &amp; Hardware Check</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1 max-w-2xl">
+          Ensure your camera, microphone, and track parameters are calibrated before entering the AI mock room.
+        </p>
+</div>
+<!-- Quick Session Meta Pill -->
+<div class="flex items-center gap-4 bg-surface-container-lowest px-4 py-3 rounded-xl shadow-sm self-start md:self-auto">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]" style="font-variation-settings: 'FILL' 1;">timer</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">ESTIMATED DURATION</span>
+<span class="font-headline-sm text-headline-sm text-on-surface leading-tight">25 Mins</span>
+</div>
+</div>
+<div class="w-[1px] h-8 bg-surface-container"></div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">psychology</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">EVALUATION MODEL</span>
+<span class="font-headline-sm text-headline-sm text-on-surface leading-tight">STAR Metric v4</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Two-Column Split Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+<!-- Left Column: Configuration Form & Behavioral Expectations (5 cols) -->
+<div class="lg:col-span-5 flex flex-col gap-6">
+<!-- Track & Profile Setup Card -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col gap-5">
+<div class="flex items-center justify-between pb-3">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[18px]">tune</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface">Target Track Alignment</h2>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-label-sm text-label-sm">
+              Adaptive Scoring
+            </span>
+</div>
+<!-- Industry / Track Selector -->
+<div class="flex flex-col gap-2">
+<label class="font-label-md text-label-md text-on-surface flex items-center justify-between">
+<span>Target Industry &amp; Market Track</span>
+<span class="font-code-metric text-label-sm text-primary">Geo-Tailored</span>
+</label>
+<div class="relative bg-surface-container-low rounded-lg p-3 flex flex-col gap-2 cursor-pointer transition-colors hover:bg-surface-container">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2 text-on-surface font-label-md">
+<span class="material-symbols-outlined text-primary text-[20px]">hub</span>
+<span>Tech - Malaysian Market (MSC / Digital Economy Hub)</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+<!-- NLP Boost indicator badge -->
+<div class="flex items-center gap-2 pt-1">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-code-metric text-label-sm">
+<span class="material-symbols-outlined text-[14px]">bolt</span>
+                  NLP Keyword Boost: Active
+                </span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Local Fintech &amp; MSC Taxonomy</span>
+</div>
+</div>
+</div>
+<!-- Interview Competency Level Selector -->
+<div class="flex flex-col gap-2">
+<label class="font-label-md text-label-md text-on-surface">Interview Type &amp; Seniority</label>
+<div class="bg-surface-container-low rounded-lg p-3 flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-2 text-on-surface font-label-md">
+<span class="material-symbols-outlined text-secondary text-[20px]">code_blocks</span>
+<span>Behavioral &amp; Technical Competency (Junior Software Engineer)</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">expand_more</span>
+</div>
+</div>
+<!-- AI Voice Persona Option -->
+<div class="flex flex-col gap-2">
+<label class="font-label-md text-label-md text-on-surface flex items-center justify-between">
+<span>AI Interlocutor Voice Engine</span>
+<span class="font-label-sm text-label-sm text-tertiary">Natural Synthesis</span>
+</label>
+<div class="bg-surface-container-low rounded-lg p-3 flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary font-headline-sm text-headline-sm">
+                  S
+                </div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">AI Voice: Sarah (Professional &amp; Supportive)</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Neutral accent with paced cognitive pauses</span>
+</div>
+</div>
+<button class="px-2.5 py-1 rounded bg-surface-container-highest hover:bg-primary-fixed text-primary font-label-sm text-label-sm flex items-center gap-1 transition-colors" type="button">
+<span class="material-symbols-outlined text-[16px]">volume_up</span>
+                Sample
+              </button>
+</div>
+</div>
+</div>
+<!-- Preparation Checklist & STAR Protocol Card -->
+<div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">assignment_turned_in</span>
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Session Protocol &amp; Expectations</h3>
+</div>
+<span class="font-code-metric text-label-sm text-outline">3 GUIDELINES</span>
+</div>
+<div class="flex flex-col gap-3.5">
+<!-- Item 1 -->
+<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low">
+<div class="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5 font-code-metric text-label-sm">
+                1
+              </div>
+<div class="flex flex-col">
+<span class="font-label-md text-label-md text-on-surface">5 Structured Questions</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Standard interview track will run for approx. 20-25 mins with follow-up probing questions.
+                </p>
+</div>
+</div>
+<!-- Item 2: STAR Segmented Tracker Highlight -->
+<div class="flex flex-col gap-2 p-3 rounded-lg bg-surface-container-low">
+<div class="flex items-start gap-3">
+<div class="w-6 h-6 rounded-full bg-tertiary-container/10 text-tertiary flex items-center justify-center shrink-0 mt-0.5 font-code-metric text-label-sm">
+                  2
+                </div>
+<div class="flex flex-col w-full">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md text-on-surface">STAR Framework Recommended</span>
+<span class="text-tertiary font-code-metric text-label-sm">4 Phase Scoring</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                    Structure answers with Situation, Task, Action, and Result for high structural index.
+                  </p>
+</div>
+</div>
+<!-- STAR Visual Track Preview -->
+<div class="grid grid-cols-4 gap-1.5 mt-2 pt-2 bg-surface-container-lowest p-2 rounded-lg">
+<div class="flex flex-col gap-1 items-center">
+<div class="w-full h-1.5 bg-primary rounded-full"></div>
+<span class="font-code-metric text-[10px] text-on-surface-variant">S : Situation</span>
+</div>
+<div class="flex flex-col gap-1 items-center">
+<div class="w-full h-1.5 bg-primary rounded-full"></div>
+<span class="font-code-metric text-[10px] text-on-surface-variant">T : Task</span>
+</div>
+<div class="flex flex-col gap-1 items-center">
+<div class="w-full h-1.5 bg-primary rounded-full"></div>
+<span class="font-code-metric text-[10px] text-on-surface-variant">A : Action</span>
+</div>
+<div class="flex flex-col gap-1 items-center">
+<div class="w-full h-1.5 bg-primary rounded-full"></div>
+<span class="font-code-metric text-[10px] text-on-surface-variant">R : Result</span>
+</div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low">
+<div class="w-6 h-6 rounded-full bg-secondary/10 text-secondary flex items-center justify-center shrink-0 mt-0.5 font-code-metric text-label-sm">
+                3
+              </div>
+<div class="flex flex-col">
+<div class="flex items-center gap-2">
+<span class="font-label-md text-label-md text-on-surface">Real-Time Non-Verbal Cues</span>
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+                  Subtle posture, pacing, and eye contact telemetry enabled. HUD alerts appear only during drift.
+                </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Hardware Video Preview & Streaming Telemetry (7 cols) -->
+<div class="lg:col-span-7 flex flex-col gap-6">
+<!-- Master Video Viewport Card -->
+<div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[22px]">videocam</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Webcam Stream Alignment</span>
+</div>
+<!-- Live Indicator Badge -->
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-error-container text-on-error-container font-code-metric text-label-sm">
+<span class="w-2 h-2 rounded-full bg-error animate-ping"></span>
+              LIVE FEED CALIBRATION
+            </div>
+</div>
+<!-- Simulated Video Viewport with HUD Framing Box -->
+<div class="relative w-full aspect-[16/10] bg-inverse-surface rounded-xl overflow-hidden flex items-center justify-center group shadow-inner">
+<!-- Candidate Webcam Feed -->
+<img alt="Candidate webcam stream" class="w-full h-full object-cover object-center transform scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB97RYMEc0gFRsgLMPwCGO8hkQK98wiifu0ydJwzZH7VnpP01yz_ZykMURuaA_xXobIUr7cecJ2qOFDWpB9K3tbSXp-D2rxXrnwB42tvx5-eJnX6YD3BgwJGw6xrbc9tT-KUfbwGD2MoACFeNrUvRsCb0KpO1W5haLnTqL9ECjHZtcKO84WfIaKqjyGYFkEeWO7OSBLHi2VScuSGJl8rYr9MLQeOoifj9bQsX9N1ADTsr5wLnIWGXk63A"/>
+<!-- Dark Vignette and Minimal Grid Overlay -->
+<div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/80 via-transparent to-inverse-surface/40 pointer-events-none"></div>
+<!-- Framing Guides: Golden Ratio / Center Head Positioning Box -->
+<div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+<div class="w-64 h-72 rounded-2xl relative flex flex-col justify-between p-2">
+<!-- Outer corner ticks -->
+<div class="absolute -top-1 -left-1 w-6 h-6 border-t-2 border-l-2 border-tertiary-fixed"></div>
+<div class="absolute -top-1 -right-1 w-6 h-6 border-t-2 border-r-2 border-tertiary-fixed"></div>
+<div class="absolute -bottom-1 -left-1 w-6 h-6 border-b-2 border-l-2 border-tertiary-fixed"></div>
+<div class="absolute -bottom-1 -right-1 w-6 h-6 border-b-2 border-r-2 border-tertiary-fixed"></div>
+<!-- Center Targeting Crosshairs -->
+<div class="w-full flex justify-between items-center px-4 pt-1">
+<span class="font-code-metric text-[10px] text-tertiary-fixed bg-inverse-surface/60 px-1.5 py-0.5 rounded backdrop-blur">HEAD POSITION BOX</span>
+<span class="material-symbols-outlined text-tertiary-fixed text-[16px]">center_focus_strong</span>
+</div>
+<div class="w-full flex justify-between items-center px-4 pb-1">
+<span class="font-code-metric text-[10px] text-inverse-on-surface bg-inverse-surface/60 px-1.5 py-0.5 rounded backdrop-blur">EYE-LINE LEVEL</span>
+<span class="font-code-metric text-[10px] text-tertiary-fixed bg-inverse-surface/60 px-1.5 py-0.5 rounded backdrop-blur">✓ LOCKED</span>
+</div>
+</div>
+</div>
+<!-- Bottom Video Overlay HUD Chips -->
+<div class="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-none">
+<div class="flex items-center gap-2 bg-inverse-surface/80 backdrop-blur-md px-3 py-1.5 rounded-lg text-inverse-on-surface">
+<span class="material-symbols-outlined text-[16px] text-tertiary-fixed">face</span>
+<span class="font-label-sm text-label-sm font-semibold">Amirul (Candidate)</span>
+<span class="text-outline-variant font-code-metric text-[11px]">• 1080p 60fps</span>
+</div>
+<div class="flex items-center gap-2 bg-inverse-surface/80 backdrop-blur-md px-3 py-1.5 rounded-lg text-tertiary-fixed">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+<span class="font-code-metric text-label-sm">Framing Optimal (98%)</span>
+</div>
+</div>
+</div>
+<!-- Dynamic Audio Equalizer Stream Bar -->
+<div class="bg-surface-container-low rounded-xl p-4 flex flex-col gap-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">mic</span>
+<span class="font-label-md text-label-md text-on-surface">Microphone Input Level</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-code-metric text-label-md text-on-surface font-bold">-18 dB</span>
+<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed font-code-metric text-[11px]">
+                  Excellent level
+                </span>
+</div>
+</div>
+<!-- Animated Bouncing Equalizer Graphic -->
+<div class="flex items-center gap-1.5 h-7 w-full px-2 bg-surface-container-lowest rounded-lg">
+<!-- Animated Bar Set using custom heights & transitions -->
+<div class="w-full flex items-center justify-between gap-1 h-5 overflow-hidden">
+<span class="flex-1 bg-tertiary rounded-sm h-3 animate-pulse"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-4 animate-pulse [animation-delay:75ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-2 animate-pulse [animation-delay:150ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-5 animate-pulse [animation-delay:200ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-3 animate-pulse [animation-delay:100ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-4 animate-pulse [animation-delay:300ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-5 animate-pulse [animation-delay:180ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-4 animate-pulse [animation-delay:250ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-3 animate-pulse [animation-delay:80ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-4 animate-pulse [animation-delay:120ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-5 animate-pulse [animation-delay:400ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-3 animate-pulse [animation-delay:90ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-4 animate-pulse [animation-delay:220ms]"></span>
+<span class="flex-1 bg-tertiary rounded-sm h-2 animate-pulse [animation-delay:140ms]"></span>
+<span class="flex-1 bg-surface-container-highest rounded-sm h-1.5"></span>
+<span class="flex-1 bg-surface-container-highest rounded-sm h-1.5"></span>
+<span class="flex-1 bg-surface-container-highest rounded-sm h-1.5"></span>
+<span class="flex-1 bg-surface-container-highest rounded-sm h-1.5"></span>
+</div>
+</div>
+<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
+<span>Low Noise Floor (-48 dB)</span>
+<span>Target Range: -24 dB to -12 dB</span>
+</div>
+</div>
+<!-- Verified Hardware Status Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+<!-- Camera Status Indicator -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="material-symbols-outlined text-primary text-[20px]">photo_camera</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Camera Connected</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold block leading-tight">FaceTime HD</span>
+<span class="font-code-metric text-[11px] text-tertiary font-bold mt-0.5 block">1080p 60fps [Optimal Framing]</span>
+</div>
+</div>
+<!-- Microphone Status Indicator -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="material-symbols-outlined text-primary text-[20px]">graphic_eq</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Microphone Active</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold block leading-tight">Studio USB Mic</span>
+<span class="font-code-metric text-[11px] text-tertiary font-bold mt-0.5 block">Noise Suppression ON</span>
+</div>
+</div>
+<!-- Network Latency Status Indicator -->
+<div class="p-3.5 rounded-xl bg-surface-container-low flex flex-col gap-2">
+<div class="flex items-center justify-between">
+<span class="material-symbols-outlined text-primary text-[20px]">speed</span>
+<span class="material-symbols-outlined text-tertiary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block">Network Latency</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold block leading-tight">24ms Ping</span>
+<span class="font-code-metric text-[11px] text-tertiary font-bold mt-0.5 block">Ultra-low latency connection</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Action Execution Bar -->
+<div class="w-full bg-surface-container-lowest rounded-2xl p-5 shadow-md flex flex-col md:flex-row items-center justify-between gap-4 mt-2">
+<!-- Status Badge & Utilities -->
+<div class="flex flex-wrap items-center gap-3">
+<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-tertiary-container/10 text-tertiary font-label-md text-label-md">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span>Hardware checks verified. Ready when you are.</span>
+</div>
+<button class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-low hover:bg-surface-container text-on-surface font-label-md text-label-md transition-colors shadow-sm" id="test-sound-btn" onclick="testChime(this)" type="button">
+<span class="material-symbols-outlined text-primary text-[18px]">volume_up</span>
+<span>Test Audio Output</span>
+</button>
+</div>
+<!-- Enter Interview Room Bold CTA -->
+<div class="w-full md:w-auto flex items-center gap-3">
+<a class="w-full md:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-secondary-container hover:bg-secondary text-on-secondary font-headline-sm text-headline-sm tracking-wide shadow-lg shadow-secondary-container/25 transition-all transform active:scale-[0.98]" href="#enter-interview">
+<span>Enter Interview Room</span>
+<span class="material-symbols-outlined text-[24px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+<script>
+    function testChime(btn) {
+      const origContent = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined text-tertiary text-[18px]">play_circle</span><span>Playing Chime (440Hz)...</span>';
+      btn.classList.add('bg-tertiary-fixed', 'text-on-tertiary-fixed');
+      
+      // Synthesize quick pleasant verification tone
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.25); // A5
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+      } catch (e) {
+        console.log('Audio test triggered');
+      }
+
+      setTimeout(() => {
+        btn.innerHTML = origContent;
+        btn.classList.remove('bg-tertiary-fixed', 'text-on-tertiary-fixed');
+      }, 1200);
+    }
+  </script>
+</div></main></body></html>
