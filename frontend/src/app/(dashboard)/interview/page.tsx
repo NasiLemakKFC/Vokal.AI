@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useMediaDevices } from "@/hooks/useMediaDevices";
+import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { analyzeSpeech, type SpeechAnalysisResponse } from "@/lib/speechApi";
 import QuestionPrompt from "@/components/interview/QuestionPrompt";
 import StarChecklist from "@/components/interview/StarChecklist";
 import LiveCoachingTip from "@/components/interview/LiveCoachingTip";
@@ -31,6 +33,17 @@ export default function PracticeRoom() {
   } = useMediaDevices();
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
 
+  // Modules 2 and 5: record one answer, then send it to the Python backend.
+  const {
+    start: startRecording,
+    stop: stopRecording,
+    cancel: cancelRecording,
+    setMuted: setRecorderMuted,
+  } = useAudioRecorder(selectedAudioId);
+  const [speech, setSpeech] = useState<SpeechAnalysisResponse | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
   const [questionIndex, setQuestionIndex] = useState(0);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -43,10 +56,48 @@ export default function PracticeRoom() {
     return () => clearInterval(interval);
   }, [isSessionActive]);
 
+  useEffect(() => {
+    setRecorderMuted(!isMicOn);
+  }, [isMicOn, setRecorderMuted]);
+
   const handleNext = () => {
+    cancelRecording();
     setIsSessionActive(false);
     setElapsedSeconds(0);
+    setSpeech(null);
+    setSpeechError(null);
     setQuestionIndex((i) => (i + 1) % QUESTIONS.length);
+  };
+
+  // Start = begin recording. Stop = send the audio for analysis (Modules 2 and 5).
+  const handleToggleSession = async () => {
+    if (isAnalyzing) return;
+
+    if (!isSessionActive) {
+      setSpeech(null);
+      setSpeechError(null);
+      try {
+        await startRecording();
+        setElapsedSeconds(0);
+        setIsSessionActive(true);
+      } catch {
+        setSpeechError("Cannot use the microphone. Check the browser permission and the selected device.");
+      }
+      return;
+    }
+
+    setIsSessionActive(false);
+    const audio = await stopRecording();
+    if (!audio || audio.size === 0) return;
+
+    setIsAnalyzing(true);
+    try {
+      setSpeech(await analyzeSpeech(audio));
+    } catch (err) {
+      setSpeechError(err instanceof Error ? err.message : "Speech analysis failed.");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   // Mock STAR detection (Module 3) — to be driven by backend NLP.
@@ -57,13 +108,14 @@ export default function PracticeRoom() {
     result: { detected: false, inProgress: false, summary: "Not yet — finish with a measurable outcome." },
   });
 
-  // Mock live metrics (Modules 4 & 5) — to be driven by MediaPipe + Whisper.
-  const [metrics] = useState({
-    wpm: 135,
+  // Module 5 values come from the speech backend after each answer.
+  // Module 4 values (eyeContact, postureAlert) are still mock: replace with useFaceMesh output.
+  const metrics = {
+    wpm: speech?.ui.wpm ?? 0,
     eyeContact: 94,
     postureAlert: "Sit up straight" as string | null,
-    fillerCount: 2,
-  });
+    fillerCount: speech?.ui.fillerCount ?? 0,
+  };
 
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
@@ -118,11 +170,20 @@ export default function PracticeRoom() {
           />
           <div className="flex items-center gap-2 text-[13px]">
             <span className="badge !text-[12px] !py-1">
-              Pace <span className="font-semibold tabular-nums">{metrics.wpm} WPM</span>
+              Pace <span className="font-semibold tabular-nums">{speech ? `${metrics.wpm} WPM` : "—"}</span>
             </span>
             <span className="badge !text-[12px] !py-1">
-              Fillers <span className="font-semibold tabular-nums">{metrics.fillerCount}</span>
+              Fillers <span className="font-semibold tabular-nums">{speech ? metrics.fillerCount : "—"}</span>
             </span>
+            <span className="badge !text-[12px] !py-1">
+              Long pauses <span className="font-semibold tabular-nums">{speech ? speech.ui.longPauses : "—"}</span>
+            </span>
+            {isAnalyzing && <span className="text-[12px] text-[#5d5f60]">Analysing your answer…</span>}
+            {speechError && (
+              <span role="alert" className="text-[12px] text-[#c4242a]">
+                {speechError}
+              </span>
+            )}
           </div>
         </section>
       </div>
@@ -133,7 +194,7 @@ export default function PracticeRoom() {
         isSessionActive={isSessionActive}
         onToggleMic={() => setIsMicOn((v) => !v)}
         onToggleVideo={() => setIsVideoOn((v) => !v)}
-        onToggleSession={() => setIsSessionActive((v) => !v)}
+        onToggleSession={handleToggleSession}
         onOpenSettings={() => setIsDeviceModalOpen(true)}
         onNextQuestion={handleNext}
       />
