@@ -6,42 +6,69 @@ HOW TO USE (for the integrator):
     from speech_module import analyze_audio
     result = analyze_audio("answer.wav")   # returns a Python dict (JSON-ready)
 
-INSTALL (Google Colab):
-    !pip install faster-whisper librosa soundfile
-    !apt-get install -y ffmpeg
-
-The Whisper model is PRE-TRAINED. No training is needed. It is downloaded
-once on the first run and then reused.
+Malaysian English / Manglish support:
+    Uses Mesolitica's fine-tuned `malaysian-whisper-small-v3` (CTranslate2 int8)
+    when converted in `backend/models/malaysian-whisper-small-v3-ct2`.
+    Run `python convert_malaysian_whisper.py` once to prepare the local model.
 """
 
 import json
+import os
 import re
 import tempfile
 from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent
+LOCAL_MALAYSIAN_MODEL = BASE_DIR / "models" / "malaysian-whisper-small-v3-ct2"
+
+
+def _default_model_size() -> str:
+    env_model = os.getenv("WHISPER_MODEL", "").strip()
+    if env_model:
+        return env_model
+    if (LOCAL_MALAYSIAN_MODEL / "model.bin").exists():
+        return str(LOCAL_MALAYSIAN_MODEL)
+    return "small"
+
+
 # ---------------------------------------------------------------------------
-# SETTINGS (tune these and justify them in the report)
+# SETTINGS (tuned for Malaysian English, Manglish & technical interviews)
 # ---------------------------------------------------------------------------
-# Trick: this text nudges Whisper to KEEP "um" and "uh" instead of deleting them.
-# Chosen with compare_configs.py (setting G): on 2 recordings with fillers recall went
-# from 29% to 71% with precision 100%, and a clean recording gave 0 false fillers.
-FILLER_PROMPT = ("Umm, so, uh, I was, like, thinking... you know, um, it is, uh, hard to say. "
-                 "Hmm, okay, so, umm, let me, uh, explain.")
-FILLER_HOTWORDS = "Umm, uh, hmm, like, you know"
+# Nudges Whisper to keep both English fillers ("um", "uh") and Malaysian
+# particles ("lah", "kan") instead of dropping or rewriting them.
+FILLER_PROMPT = (
+    "Umm, so, uh, actually lah, during my internship at UTeM, I was, like, "
+    "debugging the Python API and SQL database, you know, um, then kan, "
+    "we fixed the server bug lah. Hmm, okay, so basically, let me explain."
+)
+FILLER_HOTWORDS = (
+    "Umm, uh, ah, hmm, lah, leh, lor, kan, actually, basically, like, you know, "
+    "API, SQL, Git, GitHub, Python, JavaScript, TypeScript, React, Next.js, "
+    "database, backend, frontend, debugging, deployment, UTeM, FTMK, FYP"
+)
 
 CONFIG = {
-    "model_size": "small.en",         # tiny.en / base.en / small.en (bigger = slower, more accurate)
-    # --- Whisper decoding settings (use compare_configs.py to choose the best ones) ---
-    "initial_prompt": FILLER_PROMPT,  # None = no prompt. NOTE: only reaches the FIRST 30 s of audio.
-    "hotwords": FILLER_HOTWORDS,      # text added to EVERY 30 s window, e.g. "Umm, uh, like, you know"
-    "whisper_options": {"condition_on_previous_text": True},   # extra faster-whisper options
+    "model_size": _default_model_size(),
+    "language": os.getenv("WHISPER_LANGUAGE", "en"),  # "en" or "auto" (BM+EN code-switch)
+    "initial_prompt": FILLER_PROMPT,
+    "hotwords": FILLER_HOTWORDS,
+    "whisper_options": {
+        "condition_on_previous_text": True,
+        "vad_filter": True,
+        "vad_parameters": {"min_silence_duration_ms": 600, "speech_pad_ms": 300},
+    },
     "sample_rate": 16000,            # Hz, the format Whisper prefers
     "long_pause_sec": 2.0,           # gap above this = long pause
     "natural_pause_sec": 0.5,        # gap below this = normal speech
     "wpm_min": 120,                  # ideal speaking rate range for interviews
     "wpm_max": 160,
-    "single_fillers": {"um", "umm", "ummm", "ummp", "uh", "uhh", "ah", "er", "erm",
-                       "em", "emm", "ehm", "eh", "hmm", "hm", "mm", "mmm"},
+    "single_fillers": {
+        "um", "umm", "ummm", "ummp", "uh", "uhh", "ah", "er", "erm",
+        "em", "emm", "ehm", "eh", "hmm", "hm", "mm", "mmm",
+    },
+    "manglish_fillers": {
+        "lah", "la", "leh", "lor", "mah", "kan", "wei", "weh", "bro", "sis", "ya",
+    },
     "phrase_fillers": [("you", "know"), ("i", "mean"), ("sort", "of"), ("kind", "of")],
     "soft_fillers": {"basically", "actually", "literally"},   # counted separately
 }
@@ -52,22 +79,30 @@ CONFIG = {
 # ---------------------------------------------------------------------------
 def preprocess_audio(in_path: str) -> str:
     """Convert any audio file (wav, m4a, mp3, webm...) to 16 kHz mono WAV.
-    Returns the new file path.
-
-    ffmpeg does the conversion because librosa alone cannot open .webm or .m4a.
-    A unique temp file name is used, so two requests at the same time do not clash."""
+    Strips sub-80Hz fan/desk rumble via highpass without altering dB dynamics
+    (preserving accurate silence vs. speech thresholds in detect_pauses_audio)."""
+    import glob
     import shutil
     import subprocess
 
     fd, out_path = tempfile.mkstemp(suffix="_16k.wav")
-    import os
     os.close(fd)
 
     ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        winget_pattern = os.path.expandvars(
+            r"%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg*\*\bin\ffmpeg.exe"
+        )
+        matches = glob.glob(winget_pattern)
+        if matches:
+            ffmpeg = matches[0]
     if ffmpeg:
         result = subprocess.run(
-            [ffmpeg, "-loglevel", "error", "-y", "-i", in_path,
-             "-ar", str(CONFIG["sample_rate"]), "-ac", "1", out_path],
+            [
+                ffmpeg, "-loglevel", "error", "-y", "-i", in_path,
+                "-af", "highpass=f=80",
+                "-ar", str(CONFIG["sample_rate"]), "-ac", "1", out_path,
+            ],
             capture_output=True, text=True,
         )
         if result.returncode != 0:
@@ -92,36 +127,77 @@ def preprocess_audio(in_path: str) -> str:
 
 
 _model_cache = {}
+_active_device = "cpu"
 
 
-def _get_model(model_size: str = None):
-    """Load a Whisper model once and reuse it. model_size can also be a Hugging Face
-    model name, for example "nyrahealth/faster_CrisperWhisper"."""
-    size = model_size or CONFIG["model_size"]
-    if size not in _model_cache:
-        from faster_whisper import WhisperModel
-        _model_cache[size] = WhisperModel(size, device="cpu", compute_type="int8")
-    return _model_cache[size]
+def get_model_display_name() -> str:
+    size = _resolve_model_size(None)
+    if str(LOCAL_MALAYSIAN_MODEL) == size:
+        return "malaysian-whisper-small-v3"
+    return Path(size).name if Path(size).exists() else size
+
+
+def get_active_device() -> str:
+    return _active_device
+
+
+def _resolve_model_size(model_size: str = None) -> str:
+    if model_size:
+        return model_size
+    if CONFIG["model_size"] == "small" and (LOCAL_MALAYSIAN_MODEL / "model.bin").exists():
+        return str(LOCAL_MALAYSIAN_MODEL)
+    return CONFIG["model_size"]
+
+
+def _get_model(model_size: str = None, force_cpu: bool = False):
+    """Load a Whisper model once and reuse it (CPU int8 by default; set WHISPER_DEVICE=cuda to opt into GPU)."""
+    global _active_device
+    from faster_whisper import WhisperModel
+    import ctranslate2
+
+    size = _resolve_model_size(model_size)
+    pref = "cpu" if force_cpu else os.getenv("WHISPER_DEVICE", "cpu").lower()
+
+    use_cuda = pref == "cuda" and ctranslate2.get_cuda_device_count() > 0
+    if use_cuda:
+        key = (size, "cuda")
+        if key not in _model_cache:
+            try:
+                _model_cache[key] = WhisperModel(size, device="cuda", compute_type="int8_float16")
+            except Exception:
+                if pref == "cuda":
+                    raise
+                use_cuda = False
+        if use_cuda:
+            _active_device = "cuda"
+            return _model_cache[key], "cuda"
+
+    key = (size, "cpu")
+    if key not in _model_cache:
+        _model_cache[key] = WhisperModel(size, device="cpu", compute_type="int8")
+    _active_device = "cpu"
+    return _model_cache[key], "cpu"
 
 
 _USE_DEFAULT = object()
 
 
 def transcribe(wav_path: str, model_size: str = None, initial_prompt=_USE_DEFAULT,
-               hotwords=_USE_DEFAULT, **options) -> dict:
+               hotwords=_USE_DEFAULT, language=_USE_DEFAULT, **options) -> dict:
     """Run Whisper and return word-level timestamps plus raw/clean text.
-
-    With no extra arguments it uses the settings in CONFIG. The extra arguments exist
-    so compare_configs.py can test other settings on the same recording.
-    Pass initial_prompt=None to switch the prompt off. Other keyword arguments go
-    straight to faster-whisper (for example beam_size=1)."""
-    model = _get_model(model_size)
+    Pass language='auto' (or None) for mixed BM+English code-switching."""
     if initial_prompt is _USE_DEFAULT:
         initial_prompt = CONFIG["initial_prompt"]
     if hotwords is _USE_DEFAULT:
         hotwords = CONFIG["hotwords"]
+    if language is _USE_DEFAULT:
+        language = CONFIG["language"]
+    if language == "auto":
+        language = None
 
-    settings = {"language": "en", "word_timestamps": True}
+    settings = {"word_timestamps": True}
+    if language:
+        settings["language"] = language
     settings.update(CONFIG["whisper_options"])
     settings.update(options)
     if initial_prompt:
@@ -129,18 +205,34 @@ def transcribe(wav_path: str, model_size: str = None, initial_prompt=_USE_DEFAUL
     if hotwords:
         settings["hotwords"] = hotwords
 
-    segments, info = model.transcribe(wav_path, **settings)
+    model, device = _get_model(model_size)
 
-    words = []
-    for seg in segments:
-        for w in seg.words:
-            words.append({
-                "word": w.word.strip(),
-                "start": round(w.start, 2),
-                "end": round(w.end, 2),
-            })
+    def _run(whisper_model):
+        segments, info = whisper_model.transcribe(wav_path, **settings)
+        words = []
+        for seg in segments:
+            if not seg.words:
+                continue
+            for w in seg.words:
+                words.append({
+                    "word": w.word.strip(),
+                    "start": round(w.start, 2),
+                    "end": round(w.end, 2),
+                })
+        return words, info.duration
 
-    return build_transcript(words, duration=info.duration)
+    try:
+        words, duration = _run(model)
+    except Exception:
+        # Runtime CUDA DLL failures (e.g. missing cublas64_12.dll on Windows) happen on first transcribe.
+        if device == "cuda":
+            _model_cache.pop((_resolve_model_size(model_size), "cuda"), None)
+            cpu_model, _ = _get_model(model_size, force_cpu=True)
+            words, duration = _run(cpu_model)
+        else:
+            raise
+
+    return build_transcript(words, duration=duration)
 
 
 def _normalise(token: str) -> str:
@@ -150,16 +242,16 @@ def _normalise(token: str) -> str:
 
 def build_transcript(words: list, duration: float = None) -> dict:
     """Create the structured output: words + raw text + clean text."""
-    fillers = CONFIG["single_fillers"]
+    stripped_fillers = CONFIG["single_fillers"] | CONFIG["manglish_fillers"]
     raw_text = " ".join(w["word"] for w in words)
-    clean_words = [w["word"] for w in words if _normalise(w["word"]) not in fillers]
+    clean_words = [w["word"] for w in words if _normalise(w["word"]) not in stripped_fillers]
     clean_text = " ".join(clean_words)
     if duration is None and words:
         duration = words[-1]["end"]
     return {
         "duration_sec": round(duration or 0, 2),
         "words": words,
-        "raw_text": raw_text,      # keeps "um", "ah" -> used by Module 5
+        "raw_text": raw_text,      # keeps "um", "ah", "lah" -> used by Module 5
         "clean_text": clean_text,  # fillers removed -> send to Module 3
     }
 
@@ -168,14 +260,17 @@ def build_transcript(words: list, duration: float = None) -> dict:
 # MODULE 5 - SPEECH ANALYSIS
 # ---------------------------------------------------------------------------
 def detect_fillers(words: list) -> dict:
-    """Count filler words. Handles 'like' and two-word fillers."""
+    """Count filler words. Handles English fillers, Manglish particles, 'like', and two-word fillers."""
     counts = {}
+    manglish_breakdown = {}
     positions = []   # index of each filler word
     n = len(words)
     skip_next = False
 
-    def add(label, idx):
+    def add(label, idx, is_manglish=False):
         counts[label] = counts.get(label, 0) + 1
+        if is_manglish:
+            manglish_breakdown[label] = manglish_breakdown.get(label, 0) + 1
         positions.append(idx)
 
     for i, w in enumerate(words):
@@ -189,7 +284,12 @@ def detect_fillers(words: list) -> dict:
             add(tok, i)
             continue
 
-        # 2) two-word fillers: you know, i mean ...
+        # 2) Manglish / Malaysian informal particles: lah, leh, lor, kan ...
+        if tok in CONFIG["manglish_fillers"]:
+            add(tok, i, is_manglish=True)
+            continue
+
+        # 3) two-word fillers: you know, i mean ...
         if i + 1 < n:
             nxt = _normalise(words[i + 1]["word"])
             if (tok, nxt) in CONFIG["phrase_fillers"]:
@@ -197,7 +297,7 @@ def detect_fillers(words: list) -> dict:
                 skip_next = True
                 continue
 
-        # 3) "like": only a filler when it is surrounded by pauses or commas
+        # 4) "like": only a filler when it is surrounded by pauses or commas
         if tok == "like":
             prev_comma = i > 0 and words[i - 1]["word"].endswith(",")
             self_comma = w["word"].endswith(",")
@@ -207,12 +307,17 @@ def detect_fillers(words: list) -> dict:
                 add("like", i)
             continue
 
-        # 4) soft fillers (reported separately, not counted as hard fillers)
+        # 5) soft fillers (reported separately, not counted as hard fillers)
         if tok in CONFIG["soft_fillers"]:
             counts[tok] = counts.get(tok, 0) + 1
 
     hard_total = sum(v for k, v in counts.items() if k not in CONFIG["soft_fillers"])
-    return {"total": hard_total, "breakdown": counts}
+    return {
+        "total": hard_total,
+        "breakdown": counts,
+        "manglish_total": sum(manglish_breakdown.values()),
+        "manglish_breakdown": manglish_breakdown,
+    }
 
 
 def detect_pauses(words: list) -> dict:
@@ -242,12 +347,6 @@ def detect_pauses_audio(wav_path: str, words: list = None) -> dict:
     """
     Find long pauses directly from the audio signal (silence detection).
     This does not depend on Whisper timestamps, so it is more reliable.
-
-    The silence threshold adapts to each recording:
-      - noise floor  = loudness of the quietest 10% of the recording
-      - speech level = loudness of the loudest 5% of the recording
-      - threshold    = the higher of (noise floor + 10 dB) and (speech level - 35 dB)
-    A frame quieter than the threshold counts as silence.
     """
     import numpy as np
     import librosa
@@ -281,7 +380,6 @@ def detect_pauses_audio(wav_path: str, words: list = None) -> dict:
 
     frame_sec = hop / sr
     long_pauses, natural = [], 0
-    # Only look at gaps BETWEEN speech parts. Silence at the very start or end is ignored.
     for k in range(len(runs) - 1):
         gap_start = runs[k][1] * frame_sec
         gap = (runs[k + 1][0] - runs[k][1]) * frame_sec
@@ -311,8 +409,9 @@ def speaking_rate(words: list) -> float:
     """Words per minute, using the time from first to last word."""
     if len(words) < 2:
         return 0.0
+    excluded = CONFIG["single_fillers"] | CONFIG["manglish_fillers"]
     minutes = (words[-1]["end"] - words[0]["start"]) / 60
-    spoken = [w for w in words if _normalise(w["word"]) not in CONFIG["single_fillers"]]
+    spoken = [w for w in words if _normalise(w["word"]) not in excluded]
     return round(len(spoken) / minutes, 1) if minutes > 0 else 0.0
 
 
@@ -337,9 +436,7 @@ def fluency_score(filler_rate: float, long_pauses: int, wpm: float) -> dict:
 
 
 def analyze_speech(transcript: dict, audio_pauses: dict = None) -> dict:
-    """Module 5 entry point. Takes the Module 2 output and returns metrics.
-    If audio_pauses is given, pauses come from the audio signal (more reliable).
-    Otherwise they are estimated from the word timestamps."""
+    """Module 5 entry point. Takes the Module 2 output and returns metrics."""
     words = transcript["words"]
     total_words = max(len(words), 1)
 
@@ -353,6 +450,8 @@ def analyze_speech(transcript: dict, audio_pauses: dict = None) -> dict:
         "filler_count": fillers["total"],
         "filler_rate_per_100_words": filler_rate,
         "filler_breakdown": fillers["breakdown"],
+        "manglish_filler_count": fillers["manglish_total"],
+        "manglish_breakdown": fillers["manglish_breakdown"],
         "long_pause_count": pauses["long_pause_count"],
         "longest_pause_sec": pauses["longest_pause_sec"],
         "total_long_pause_sec": pauses["total_long_pause_sec"],
@@ -368,17 +467,13 @@ def analyze_speech(transcript: dict, audio_pauses: dict = None) -> dict:
 # ---------------------------------------------------------------------------
 # MAIN ENTRY POINT (this is the function the group will call)
 # ---------------------------------------------------------------------------
-def analyze_audio(audio_path: str) -> dict:
+def analyze_audio(audio_path: str, language=_USE_DEFAULT) -> dict:
     """
     Full pipeline: audio file -> transcript (Module 2) -> speech metrics (Module 5).
-
-    Returns a dict with:
-        "transcript": {duration_sec, words, raw_text, clean_text}
-        "speech_analysis": {filler_count, wpm, fluency_score, ...}
     """
     wav = preprocess_audio(audio_path)
     try:
-        transcript = transcribe(wav)
+        transcript = transcribe(wav, language=language)
         audio_pauses = detect_pauses_audio(wav, transcript["words"])
         analysis = analyze_speech(transcript, audio_pauses)
     finally:
@@ -394,15 +489,20 @@ def analyze_audio(audio_path: str) -> dict:
 # ---------------------------------------------------------------------------
 def _demo_without_audio():
     fake = [
-        ("So", 0.0, 0.3), ("um,", 0.5, 0.8), ("I", 1.0, 1.1), ("led", 1.1, 1.3),
-        ("a", 1.3, 1.4), ("team", 1.4, 1.8), ("and", 4.2, 4.4),   # 2.4s pause before "and"
-        ("it", 4.4, 4.5), ("was,", 4.5, 4.8), ("like,", 4.9, 5.2),
-        ("really", 5.2, 5.6), ("hard", 5.6, 6.0), ("you", 6.1, 6.2), ("know", 6.2, 6.4),
-        ("but", 6.4, 6.6), ("I", 6.6, 6.7), ("like", 6.7, 6.9), ("teamwork", 6.9, 7.6),
+        ("So", 0.0, 0.3), ("um,", 0.5, 0.8), ("actually", 0.8, 1.1), ("lah,", 1.1, 1.3),
+        ("I", 1.3, 1.4), ("led", 1.4, 1.6), ("a", 1.6, 1.7), ("team", 1.7, 2.0),
+        ("and", 4.4, 4.6),   # 2.4s pause before "and"
+        ("it", 4.6, 4.7), ("was,", 4.7, 5.0), ("like,", 5.1, 5.4),
+        ("really", 5.4, 5.8), ("hard", 5.8, 6.1), ("you", 6.2, 6.3), ("know,", 6.3, 6.5),
+        ("kan", 6.5, 6.8), ("but", 6.8, 7.0), ("I", 7.0, 7.1), ("like", 7.1, 7.3),
+        ("teamwork", 7.3, 7.9), ("lah.", 7.9, 8.2),
     ]
     words = [{"word": w, "start": s, "end": e} for w, s, e in fake]
     transcript = build_transcript(words)
-    print(json.dumps(analyze_speech(transcript), indent=2))
+    print(json.dumps({
+        "clean_text": transcript["clean_text"],
+        "speech_analysis": analyze_speech(transcript),
+    }, indent=2))
 
 
 if __name__ == "__main__":

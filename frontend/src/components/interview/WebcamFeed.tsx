@@ -235,7 +235,7 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
         {/* ── Debug Canvas Overlay ──────────────────────────────────────── */}
         <canvas
           ref={canvasRef}
-          className={`absolute inset-0 h-full w-full pointer-events-none ${
+          className={`absolute inset-0 h-full w-full object-cover pointer-events-none ${
             showDebugOverlay ? "block" : "hidden"
           }`}
           style={{ transform: "scaleX(-1)" }} // Must match video mirror

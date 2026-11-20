@@ -13,10 +13,13 @@ On Windows: `winget install ffmpeg`, then open a new terminal.
     python -m venv venv
     venv\Scripts\activate            (Mac/Linux: source venv/bin/activate)
     pip install -r requirements.txt
+    python convert_malaysian_whisper.py   # optional once: converts Mesolitica Malaysian Whisper (int8)
     uvicorn main:app --port 8000
 
-The first start downloads the Whisper `small.en` model (several hundred MB).
-Later starts are faster. Check it works: open http://localhost:8000/health
+When `backend/models/malaysian-whisper-small-v3-ct2` exists, the server automatically
+uses `mesolitica/malaysian-whisper-small-v3` (tuned for Malaysian English & Manglish)
+on CPU `int8` by default (fast & reliable without CUDA/cuDNN toolkit setup; set `WHISPER_DEVICE=cuda`
+to opt into GPU). Otherwise it falls back to Whisper `small`. Check it works: open http://localhost:8000/health
 
 Frontend: add this line to `frontend/.env.local`, then run `npm run dev`.
 

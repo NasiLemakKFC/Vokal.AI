@@ -28,82 +28,164 @@
 
 import {
   FaceLandmarker,
+  PoseLandmarker,
   FilesetResolver,
   type FaceLandmarkerOptions,
   type FaceLandmarkerResult,
+  type PoseLandmarkerOptions,
+  type PoseLandmarkerResult,
+  type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
 
-// ─── Singleton Reference ─────────────────────────────────────────────────────
-// We keep a module-level reference so we only load the ~4 MB WASM + model once.
+// ─── Singleton References ────────────────────────────────────────────────────
+// We keep module-level references so we only load the WASM + models once.
+let visionFilesetPromise: ReturnType<typeof FilesetResolver.forVisionTasks> | null = null;
 let faceLandmarkerInstance: FaceLandmarker | null = null;
+let faceLandmarkerPromise: Promise<FaceLandmarker> | null = null;
+let poseLandmarkerInstance: PoseLandmarker | null = null;
+let poseLandmarkerPromise: Promise<PoseLandmarker> | null = null;
 
-// ─── Default Configuration ───────────────────────────────────────────────────
-const DEFAULT_OPTIONS: FaceLandmarkerOptions = {
-  baseOptions: {
-    // The model file is served from the MediaPipe CDN.
-    // In production you may want to self-host for reliability.
-    modelAssetPath:
-      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-    delegate: "GPU", // Use WebGL acceleration when available
-  },
-  runningMode: "VIDEO", // Continuous video stream mode (vs. single IMAGE)
-  numFaces: 1, // We only track the interviewee
-  outputFaceBlendshapes: true, // Enables expression classification
-  outputFacialTransformationMatrixes: true, // Enables head-pose estimation
+const WASM_CDN_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 
-  // TODO: Configure refineLandmarks: true to capture exact iris positions
-  //       for eye-contact tracking. When enabled the model outputs an
-  //       additional 10 iris landmarks (indices 468-477) per eye.
-};
+function getVisionFileset() {
+  if (!visionFilesetPromise) {
+    visionFilesetPromise = FilesetResolver.forVisionTasks(WASM_CDN_URL);
+  }
+  return visionFilesetPromise;
+}
+
+// ─── Default Configurations ──────────────────────────────────────────────────
+const FACE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+const POSE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+function createFaceOptions(delegate: "GPU" | "CPU"): FaceLandmarkerOptions {
+  return {
+    baseOptions: {
+      modelAssetPath: FACE_MODEL_URL,
+      delegate,
+    },
+    runningMode: "VIDEO",
+    numFaces: 1,
+    outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: true,
+  };
+}
+
+function createPoseOptions(delegate: "GPU" | "CPU"): PoseLandmarkerOptions {
+  return {
+    baseOptions: {
+      modelAssetPath: POSE_MODEL_URL,
+      delegate,
+    },
+    runningMode: "VIDEO",
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  };
+}
 
 /**
  * Initialises and returns the FaceLandmarker singleton.
- *
- * Call this once when the interview session begins (e.g. inside a
- * useEffect). Subsequent calls return the already-loaded instance.
- *
- * @returns A promise that resolves to the ready-to-use FaceLandmarker.
- *
- * @example
- * ```ts
- * const landmarker = await initFaceLandmarker();
- * const result = landmarker.detectForVideo(videoEl, performance.now());
- * ```
+ * Falls back to CPU automatically if WebGL GPU delegate is unavailable.
  */
 export async function initFaceLandmarker(): Promise<FaceLandmarker> {
-  // Return cached instance if already initialised
   if (faceLandmarkerInstance) {
     return faceLandmarkerInstance;
   }
+  if (faceLandmarkerPromise) {
+    return faceLandmarkerPromise;
+  }
 
-  // 1. Load the MediaPipe WASM runtime
-  const vision = await FilesetResolver.forVisionTasks(
-    // CDN path for the WASM binaries
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-  );
+  faceLandmarkerPromise = (async () => {
+    const vision = await getVisionFileset();
+    try {
+      faceLandmarkerInstance = await FaceLandmarker.createFromOptions(
+        vision,
+        createFaceOptions("GPU")
+      );
+    } catch {
+      faceLandmarkerInstance = await FaceLandmarker.createFromOptions(
+        vision,
+        createFaceOptions("CPU")
+      );
+    }
+    console.log("[MediaPipe] FaceLandmarker initialised successfully");
+    return faceLandmarkerInstance;
+  })();
 
-  // 2. Create the FaceLandmarker with our configuration
-  faceLandmarkerInstance = await FaceLandmarker.createFromOptions(
-    vision,
-    DEFAULT_OPTIONS
-  );
+  try {
+    return await faceLandmarkerPromise;
+  } catch (err) {
+    faceLandmarkerPromise = null;
+    throw err;
+  }
+}
 
-  console.log("[MediaPipe] FaceLandmarker initialised successfully");
-  return faceLandmarkerInstance;
+/**
+ * Initialises and returns the PoseLandmarker singleton (for Module 4 posture tracking).
+ * Uses the lightweight `pose_landmarker_lite` model (matches Nabil's `model_complexity=0`).
+ */
+export async function initPoseLandmarker(): Promise<PoseLandmarker> {
+  if (poseLandmarkerInstance) {
+    return poseLandmarkerInstance;
+  }
+  if (poseLandmarkerPromise) {
+    return poseLandmarkerPromise;
+  }
+
+  poseLandmarkerPromise = (async () => {
+    const vision = await getVisionFileset();
+    try {
+      poseLandmarkerInstance = await PoseLandmarker.createFromOptions(
+        vision,
+        createPoseOptions("GPU")
+      );
+    } catch {
+      poseLandmarkerInstance = await PoseLandmarker.createFromOptions(
+        vision,
+        createPoseOptions("CPU")
+      );
+    }
+    console.log("[MediaPipe] PoseLandmarker initialised successfully");
+    return poseLandmarkerInstance;
+  })();
+
+  try {
+    return await poseLandmarkerPromise;
+  } catch (err) {
+    poseLandmarkerPromise = null;
+    throw err;
+  }
 }
 
 /**
  * Tears down the FaceLandmarker and frees GPU/WASM resources.
- * Call this when the interview session ends or the component unmounts.
  */
 export function destroyFaceLandmarker(): void {
   if (faceLandmarkerInstance) {
     faceLandmarkerInstance.close();
     faceLandmarkerInstance = null;
+    faceLandmarkerPromise = null;
     console.log("[MediaPipe] FaceLandmarker destroyed");
   }
 }
 
-// Re-export the result type so consumers don't need to import from the
-// mediapipe package directly.
-export type { FaceLandmarkerResult };
+/**
+ * Tears down the PoseLandmarker and frees GPU/WASM resources.
+ */
+export function destroyPoseLandmarker(): void {
+  if (poseLandmarkerInstance) {
+    poseLandmarkerInstance.close();
+    poseLandmarkerInstance = null;
+    poseLandmarkerPromise = null;
+    console.log("[MediaPipe] PoseLandmarker destroyed");
+  }
+}
+
+// Re-export result types so consumers don't need to import from @mediapipe/tasks-vision directly.
+export type { FaceLandmarkerResult, PoseLandmarkerResult, NormalizedLandmark };

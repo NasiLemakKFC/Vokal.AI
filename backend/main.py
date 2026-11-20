@@ -13,7 +13,7 @@ import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 import speech_module as sm
@@ -54,6 +54,8 @@ def ui_fields(result: dict) -> dict:
         "fillersPerMin": round(sa["filler_count"] / minutes, 1) if minutes > 0 else 0,
         "fillerCount": sa["filler_count"],
         "fillers": [f"{word} ×{n}" for word, n in sa["filler_breakdown"].items()],
+        "manglishCount": sa.get("manglish_filler_count", 0),
+        "manglishFillers": [f"{word} ×{n}" for word, n in sa.get("manglish_breakdown", {}).items()],
         "longPauses": sa["long_pause_count"],
         "fluencyScore": sa["fluency_score"],
         "durationSec": transcript["duration_sec"],
@@ -63,13 +65,20 @@ def ui_fields(result: dict) -> dict:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": sm.CONFIG["model_size"]}
+    return {
+        "status": "ok",
+        "model": sm.get_model_display_name(),
+        "device": sm.get_active_device(),
+    }
 
 
 # A normal "def" (not "async def") on purpose: FastAPI then runs it in a worker
 # thread, so a slow transcription does not freeze the whole server.
 @app.post("/analyze-speech")
-def analyze_speech_endpoint(audio: UploadFile = File(...)):
+def analyze_speech_endpoint(
+    audio: UploadFile = File(...),
+    language: str = Form("en"),
+):
     suffix = Path(audio.filename or "answer.webm").suffix or ".webm"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
     try:
@@ -85,7 +94,8 @@ def analyze_speech_endpoint(audio: UploadFile = File(...)):
 
         try:
             with _analysis_lock:
-                result = sm.analyze_audio(tmp_path)
+                lang = None if language == "auto" else language
+                result = sm.analyze_audio(tmp_path, language=lang)
         except RuntimeError as e:                      # unreadable audio, missing ffmpeg
             raise HTTPException(422, str(e))
 

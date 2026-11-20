@@ -7,8 +7,10 @@ export interface SpeechUi {
   wpm: number;
   fillersPerMin: number;
   fillerCount: number;
-  /** e.g. ["um ×2", "like ×1"] */
+  /** e.g. ["um ×2", "like ×1", "lah ×1"] */
   fillers: string[];
+  manglishCount?: number;
+  manglishFillers?: string[];
   longPauses: number;
   /** 0-100 */
   fluencyScore: number;
@@ -29,6 +31,8 @@ export interface SpeechAnalysisResponse {
     filler_count: number;
     filler_rate_per_100_words: number;
     filler_breakdown: Record<string, number>;
+    manglish_filler_count?: number;
+    manglish_breakdown?: Record<string, number>;
     long_pause_count: number;
     longest_pause_sec: number;
     total_long_pause_sec: number;
@@ -40,10 +44,16 @@ export interface SpeechAnalysisResponse {
   };
 }
 
-export async function analyzeSpeech(audio: Blob): Promise<SpeechAnalysisResponse> {
+export type SpeechLanguageMode = "en" | "auto";
+
+export async function analyzeSpeech(
+  audio: Blob,
+  language: SpeechLanguageMode = "en"
+): Promise<SpeechAnalysisResponse> {
   const extension = audio.type.includes("mp4") ? "m4a" : "webm";
   const form = new FormData();
   form.append("audio", audio, `answer.${extension}`);
+  form.append("language", language);
 
   const res = await fetch("/api/speech", { method: "POST", body: form });
   if (!res.ok) {
