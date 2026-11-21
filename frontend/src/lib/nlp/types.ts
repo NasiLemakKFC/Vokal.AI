@@ -29,4 +29,5 @@ export interface AnalysisOptions {
   role: string;
   jobDescription: string;
   question: string;
+  questionKeywords?: string[];
 }

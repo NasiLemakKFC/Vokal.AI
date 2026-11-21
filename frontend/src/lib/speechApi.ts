@@ -48,14 +48,15 @@ export type SpeechLanguageMode = "en" | "auto";
 
 export async function analyzeSpeech(
   audio: Blob,
-  language: SpeechLanguageMode = "en"
+  language: SpeechLanguageMode = "en",
+  signal?: AbortSignal
 ): Promise<SpeechAnalysisResponse> {
   const extension = audio.type.includes("mp4") ? "m4a" : "webm";
   const form = new FormData();
   form.append("audio", audio, `answer.${extension}`);
   form.append("language", language);
 
-  const res = await fetch("/api/speech", { method: "POST", body: form });
+  const res = await fetch("/api/speech", { method: "POST", body: form, signal });
   if (!res.ok) {
     let message = `Speech analysis failed (${res.status}).`;
     try {

@@ -50,6 +50,7 @@ export function analyzeAnswer(answerInput: string, optionsInput: AnalysisOptions
     typeof options.role === "string" ? options.role : "",
     typeof options.jobDescription === "string" ? options.jobDescription : "",
     typeof options.question === "string" ? options.question : "",
+    Array.isArray(options.questionKeywords) ? options.questionKeywords : [],
   );
   // Overall coverage counts unique targets once, even if a term appears in multiple categories.
   const scoredGroups = keywordGroups.filter(g => g.label !== "Additional job-role skills demonstrated");

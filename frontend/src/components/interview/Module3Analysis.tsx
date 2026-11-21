@@ -3,12 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { analyzeAnswer } from "@/lib/nlp/analyze";
 import { extractJobDescriptionKeywords } from "@/lib/nlp/keywords";
+import { INTERVIEW_ROLES, type InterviewTarget } from "@/lib/interview/types";
 import type { StarKey } from "@/lib/nlp/types";
 
-const ROLES = [
-  "Software Engineer", "Frontend Developer", "Backend Developer", "Data Analyst",
-  "AI / Machine Learning Engineer", "UI/UX Designer", "QA Engineer", "Project Manager",
-];
 const STAR: { key: StarKey; letter: string; label: string }[] = [
   { key: "situation", letter: "S", label: "Situation" },
   { key: "task", letter: "T", label: "Task" },
@@ -18,29 +15,64 @@ const STAR: { key: StarKey; letter: string; label: string }[] = [
 
 interface Module3AnalysisProps {
   question: string;
+  questionKeywords?: string[];
+  target?: InterviewTarget;
+  hideTargetConfig?: boolean;
   transcript?: string;
   onTranscriptChange?: (value: string) => void;
-  onTargetChange?: (target: { mode: "company" | "role" | "general"; company: string; role: string; jobDescription: string }) => void;
+  onTargetChange?: (target: InterviewTarget) => void;
 }
 
-export default function Module3Analysis({ question, transcript, onTranscriptChange, onTargetChange }: Module3AnalysisProps) {
-  const [mode, setMode] = useState<"company" | "role" | "general">("role");
-  const [company, setCompany] = useState("");
-  const [role, setRole] = useState("Software Engineer");
-  const [jobDescription, setJobDescription] = useState("");
+export default function Module3Analysis({
+  question,
+  questionKeywords,
+  target,
+  hideTargetConfig = false,
+  transcript,
+  onTranscriptChange,
+  onTargetChange,
+}: Module3AnalysisProps) {
+  const [localMode, setLocalMode] = useState<"company" | "role" | "general">("role");
+  const [localCompany, setLocalCompany] = useState("");
+  const [localRole, setLocalRole] = useState("Software Engineer");
+  const [localJobDescription, setLocalJobDescription] = useState("");
   const [localTranscript, setLocalTranscript] = useState("");
-  useEffect(() => { onTargetChange?.({ mode, company, role, jobDescription }); }, [mode, company, role, jobDescription, onTargetChange]);
+
+  const mode = target ? target.mode : localMode;
+  const company = target ? target.company : localCompany;
+  const role = target ? target.role : localRole;
+  const jobDescription = target ? target.jobDescription : localJobDescription;
+
+  useEffect(() => {
+    if (!target) {
+      onTargetChange?.({
+        mode: localMode,
+        company: localCompany,
+        role: localRole,
+        jobDescription: localJobDescription,
+      });
+    }
+  }, [target, localMode, localCompany, localRole, localJobDescription, onTargetChange]);
+
   const answer = transcript ?? localTranscript;
   const updateAnswer = (value: string) => {
     setLocalTranscript(value);
     onTranscriptChange?.(value);
   };
-  const analysis = useMemo(() => analyzeAnswer(answer, {
-    role: mode === "role" || mode === "company" ? role : "",
-    jobDescription: mode === "company" ? jobDescription : "",
-    question,
-  }), [answer, mode, role, jobDescription, question]);
-  const jdKeywords = useMemo(() => extractJobDescriptionKeywords(jobDescription), [jobDescription]);
+  const analysis = useMemo(
+    () =>
+      analyzeAnswer(answer, {
+        role: mode === "role" || mode === "company" ? role : "",
+        jobDescription: mode !== "general" ? jobDescription : "",
+        question,
+        questionKeywords,
+      }),
+    [answer, mode, role, jobDescription, question, questionKeywords]
+  );
+  const jdKeywords = useMemo(
+    () => (mode !== "general" ? extractJobDescriptionKeywords(jobDescription) : []),
+    [mode, jobDescription]
+  );
   const starCount = STAR.filter(({ key }) => analysis.star[key].found).length;
   const hasAnswer = answer.trim().length > 0;
 
@@ -50,59 +82,86 @@ export default function Module3Analysis({ question, transcript, onTranscriptChan
         <div>
           <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[#1b6c80]">Module 03 · NLP</p>
           <h2 className="text-[19px] font-semibold text-[#131416]">Answer intelligence</h2>
-          <p className="text-[13px] text-[#5d5f60] mt-1">Configure your target role, then review live STAR and keyword analysis.</p>
+          <p className="text-[13px] text-[#5d5f60] mt-1">
+            {hideTargetConfig
+              ? "Live STAR structure and target keyword coverage for your current answer."
+              : "Configure your target role, then review live STAR and keyword analysis."}
+          </p>
         </div>
         <span className="badge">Rule-based NLP · Live analysis</span>
       </div>
 
-      <div className="card space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h3 className="font-semibold text-[14px]">Interview target</h3>
-            <p className="text-[12px] text-[#5d5f60]">Company details are optional.</p>
-          </div>
-          <div className="flex flex-wrap gap-1 rounded-[7px] bg-[#f4f6f8] p-1">
-            {([
-              ["company", "Specific company"], ["role", "General job role"], ["general", "General interview"],
-            ] as const).map(([value, label]) => (
-              <button key={value} type="button" onClick={() => setMode(value)}
-                className={`px-3 py-2 rounded-[5px] text-[12px] font-medium transition-colors ${mode === value ? "bg-white text-[#134e5e] shadow-sm" : "text-[#5d5f60] hover:text-[#131416]"}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {mode !== "general" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {mode === "company" && (
-              <label className="text-[12px] font-medium text-[#45474a] space-y-1">
-                Company name <span className="font-normal text-[#8b8d90]">(optional)</span>
-                <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="e.g. Example Technologies" className="w-full h-10 rounded-[6px] border border-[#cdced1] px-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80]" />
-              </label>
-            )}
-            <label className="text-[12px] font-medium text-[#45474a] space-y-1">
-              Job role
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-10 rounded-[6px] border border-[#cdced1] bg-white px-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80]">
-                {ROLES.map((item) => <option key={item}>{item}</option>)}
-              </select>
-            </label>
-          </div>
-        )}
-        {mode === "company" && (
-          <div className="space-y-2">
-            <label className="block text-[12px] font-medium text-[#45474a]" htmlFor="module3-jd">Job description <span className="font-normal text-[#8b8d90]">(optional)</span></label>
-            <textarea id="module3-jd" value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} rows={4} placeholder="Paste the job description to extract relevant skills and requirements..." className="w-full rounded-[6px] border border-[#cdced1] p-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80] resize-y" />
+      {hideTargetConfig ? (
+        <div className="card !py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#45474a]">
+            <span className="font-semibold text-[#131416]">Active target:</span>
+            <span className="badge">
+              {mode === "general"
+                ? "General Interview"
+                : company.trim()
+                  ? `${company.trim()} · ${role}`
+                  : role}
+            </span>
             {jdKeywords.length > 0 && (
-              <div className="rounded-[6px] bg-[#f9fbfc] border border-[#e8eaec] p-3">
-                <p className="text-[11px] font-semibold text-[#5d5f60] mb-2">EXTRACTED JOB DESCRIPTION KEYWORDS · {jdKeywords.length}</p>
-                <div className="flex flex-wrap gap-1.5">{jdKeywords.map((word) => <span key={word} className="badge">{word}</span>)}</div>
-              </div>
+              <span className="text-[12px] text-[#5d5f60] tabular-nums">
+                · {jdKeywords.length} job description skills tracked
+              </span>
             )}
           </div>
-        )}
-        {mode === "general" && <p className="text-[12px] text-[#5d5f60] bg-[#f9fbfc] rounded-[6px] p-3">General interview mode uses professional skills and STAR structure. No company or role is required.</p>}
-        {mode === "company" && company.trim() && <p className="text-[11px] text-[#5d5f60]">Preparing for {company.trim()} · {role}</p>}
-      </div>
+          <span className="text-[11.5px] text-[#5d5f60]">
+            Change target or resume in the setup card above.
+          </span>
+        </div>
+      ) : (
+        <div className="card space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-semibold text-[14px]">Interview target</h3>
+              <p className="text-[12px] text-[#5d5f60]">Company details are optional.</p>
+            </div>
+            <div className="flex flex-wrap gap-1 rounded-[7px] bg-[#f4f6f8] p-1">
+              {([
+                ["company", "Specific company"], ["role", "General job role"], ["general", "General interview"],
+              ] as const).map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setLocalMode(value)}
+                  className={`px-3 py-2 rounded-[5px] text-[12px] font-medium transition-colors ${mode === value ? "bg-white text-[#134e5e] shadow-sm" : "text-[#5d5f60] hover:text-[#131416]"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {mode !== "general" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {mode === "company" && (
+                <label className="text-[12px] font-medium text-[#45474a] space-y-1">
+                  Company name <span className="font-normal text-[#8b8d90]">(optional)</span>
+                  <input value={company} onChange={(e) => setLocalCompany(e.target.value)} placeholder="e.g. Example Technologies" className="w-full h-10 rounded-[6px] border border-[#cdced1] px-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80]" />
+                </label>
+              )}
+              <label className="text-[12px] font-medium text-[#45474a] space-y-1">
+                Job role
+                <select value={role} onChange={(e) => setLocalRole(e.target.value)} className="w-full h-10 rounded-[6px] border border-[#cdced1] bg-white px-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80]">
+                  {INTERVIEW_ROLES.map((item) => <option key={item}>{item}</option>)}
+                </select>
+              </label>
+            </div>
+          )}
+          {mode !== "general" && (
+            <div className="space-y-2">
+              <label className="block text-[12px] font-medium text-[#45474a]" htmlFor="module3-jd">Job description <span className="font-normal text-[#8b8d90]">(optional)</span></label>
+              <textarea id="module3-jd" value={jobDescription} onChange={(e) => setLocalJobDescription(e.target.value)} rows={4} placeholder="Paste the job description to extract relevant skills and requirements..." className="w-full rounded-[6px] border border-[#cdced1] p-3 text-[13px] text-[#131416] outline-none focus:border-[#1b6c80] resize-y" />
+              {jdKeywords.length > 0 && (
+                <div className="rounded-[6px] bg-[#f9fbfc] border border-[#e8eaec] p-3">
+                  <p className="text-[11px] font-semibold text-[#5d5f60] mb-2">EXTRACTED JOB DESCRIPTION KEYWORDS · {jdKeywords.length}</p>
+                  <div className="flex flex-wrap gap-1.5">{jdKeywords.map((word) => <span key={word} className="badge">{word}</span>)}</div>
+                </div>
+              )}
+            </div>
+          )}
+          {mode === "general" && <p className="text-[12px] text-[#5d5f60] bg-[#f9fbfc] rounded-[6px] p-3">General interview mode uses professional skills and STAR structure. No company or role is required.</p>}
+          {mode === "company" && company.trim() && <p className="text-[11px] text-[#5d5f60]">Preparing for {company.trim()} · {role}</p>}
+        </div>
+      )}
 
       <div className="card space-y-3">
         <div className="flex justify-between items-center gap-2">
