@@ -69,6 +69,7 @@ export default function PracticeRoom() {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showVisionOverlay, setShowVisionOverlay] = useState(true);
+  const [trackInPreview, setTrackInPreview] = useState(true);
   const [nudgeDelaySec, setNudgeDelaySec] = useState<number>(3.0);
   const [chimeEnabled, setChimeEnabled] = useState(true);
 
@@ -77,6 +78,7 @@ export default function PracticeRoom() {
   };
 
   // Module 4: Real-time client-side eye contact & posture tracking (MediaPipe Face + Pose)
+  const isVisionPaused = !isSessionActive && !trackInPreview;
   const {
     vision,
     isModelReady: isVisionReady,
@@ -85,6 +87,7 @@ export default function PracticeRoom() {
     resetSession: resetVisionSession,
   } = useVisionCoach(webcamRef, {
     enabled: isVideoOn,
+    paused: isVisionPaused,
     trackSession: isSessionActive,
     showOverlay: showVisionOverlay,
     nudgeDelaySec,
@@ -287,6 +290,8 @@ export default function PracticeRoom() {
             soundEnabled={chimeEnabled}
             onToggleSound={() => setChimeEnabled((v) => !v)}
             onCalibratePosture={calibratePosture}
+            trackInPreview={trackInPreview}
+            onToggleTrackInPreview={() => setTrackInPreview((v) => !v)}
           />
           <div className="flex items-center gap-2 text-[13px] flex-wrap">
             <span className="badge !text-[12px] !py-1">
@@ -304,15 +309,37 @@ export default function PracticeRoom() {
             <span className="badge !text-[12px] !py-1">
               Fluency <span className="font-semibold tabular-nums">{speech ? `${speech.ui.fluencyScore}%` : "—"}</span>
             </span>
-            <button
-              type="button"
-              onClick={() => setSpeechLang((l) => (l === "en" ? "auto" : "en"))}
-              title="Switch speech recognition mode: Manglish (English script) vs Auto (Malay + English code-switching)"
-              className="h-[26px] px-2.5 rounded-[4px] border border-[#cdced1] bg-white hover:bg-[#f4f6f8] text-[#131416] text-[11.5px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <span className="material-symbols-outlined text-[14px] text-[#1b6c80]">translate</span>
-              {speechLang === "en" ? "Manglish (EN)" : "Auto (BM+EN)"}
-            </button>
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => setSpeechLang((l) => (l === "en" ? "auto" : "en"))}
+                aria-label={`Speech recognition mode: ${
+                  speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"
+                }. Click to switch mode.`}
+                className="h-[26px] px-2.5 rounded-[4px] border border-[#cdced1] bg-white hover:bg-[#f4f6f8] text-[#131416] text-[11.5px] font-medium flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[14px] text-[#1b6c80]">translate</span>
+                {speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"}
+                <span className="material-symbols-outlined text-[13px] opacity-60">info</span>
+              </button>
+              <div
+                role="tooltip"
+                className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full left-0 lg:left-auto lg:right-0 mb-2 w-[255px] rounded-[6px] bg-[#131416]/95 border border-white/15 p-2.5 text-left shadow-xl z-40"
+              >
+                <p className="text-[11.5px] font-semibold text-white">
+                  Speech Recognition: {speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"}
+                </p>
+                <p className="text-[11px] text-white/80 mt-1 leading-snug">
+                  <strong className="text-white">English (MY)</strong> (recommended): Best for English interviews with a Malaysian accent or Manglish fillers (lah, kan, um) — keeps STAR &amp; keyword scoring accurate.
+                </p>
+                <p className="text-[11px] text-white/80 mt-1 leading-snug">
+                  <strong className="text-white">Mixed (BM+EN)</strong>: Best if you mix Malay and English sentences — STAR structure and common BM skill phrases are also supported.
+                </p>
+                <p className="text-[10.5px] text-[#4edea3] mt-1.5 font-medium">
+                  Click to switch mode
+                </p>
+              </div>
+            </div>
             {speech && speech.ui.fillers.length > 0 && (
               <span className="text-[11.5px] text-[#5d5f60]">
                 Detected: <span className="font-medium text-[#131416]">{speech.ui.fillers.join(", ")}</span>

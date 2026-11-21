@@ -89,6 +89,65 @@ function createPoseOptions(delegate: "GPU" | "CPU"): PoseLandmarkerOptions {
   };
 }
 
+const MEDIAPIPE_BENIGN_STDERR_PREFIXES = [
+  "INFO: Created TensorFlow Lite XNNPACK delegate for CPU",
+];
+
+let stderrFilterRefCount = 0;
+let baseConsoleError: typeof console.error | null = null;
+let mediaPipeStderrWrapper: typeof console.error | null = null;
+
+function isBenignMediaPipeStderr(args: unknown[]): boolean {
+  const first = args[0];
+  return (
+    typeof first === "string" &&
+    MEDIAPIPE_BENIGN_STDERR_PREFIXES.some((prefix) =>
+      first.trimStart().startsWith(prefix)
+    )
+  );
+}
+
+/**
+ * Emscripten binds `var err = console.error.bind(console)` inside
+ * `vision_wasm_internal.js` when a landmarker is instantiated. Wrapping
+ * `console.error` during `createFromOptions` captures this filter in the
+ * WASM closure while restoring the global `console.error` as soon as
+ * concurrent Face/Pose initialization finishes.
+ */
+async function withMediaPipeStderrFilter<T>(fn: () => Promise<T>): Promise<T> {
+  if (typeof console === "undefined") {
+    return fn();
+  }
+
+  if (stderrFilterRefCount === 0) {
+    const capturedBase = console.error;
+    baseConsoleError = capturedBase;
+    const wrapper: typeof console.error = (...args: unknown[]) => {
+      if (isBenignMediaPipeStderr(args)) {
+        return;
+      }
+      const target = console.error === wrapper ? capturedBase : console.error;
+      target.apply(console, args);
+    };
+    mediaPipeStderrWrapper = wrapper;
+    console.error = wrapper;
+  }
+  stderrFilterRefCount += 1;
+
+  try {
+    return await fn();
+  } finally {
+    stderrFilterRefCount -= 1;
+    if (stderrFilterRefCount === 0 && baseConsoleError) {
+      if (console.error === mediaPipeStderrWrapper) {
+        console.error = baseConsoleError;
+      }
+      baseConsoleError = null;
+      mediaPipeStderrWrapper = null;
+    }
+  }
+}
+
 /**
  * Initialises and returns the FaceLandmarker singleton.
  * Falls back to CPU automatically if WebGL GPU delegate is unavailable.
@@ -103,17 +162,19 @@ export async function initFaceLandmarker(): Promise<FaceLandmarker> {
 
   faceLandmarkerPromise = (async () => {
     const vision = await getVisionFileset();
-    try {
-      faceLandmarkerInstance = await FaceLandmarker.createFromOptions(
-        vision,
-        createFaceOptions("GPU")
-      );
-    } catch {
-      faceLandmarkerInstance = await FaceLandmarker.createFromOptions(
-        vision,
-        createFaceOptions("CPU")
-      );
-    }
+    faceLandmarkerInstance = await withMediaPipeStderrFilter(async () => {
+      try {
+        return await FaceLandmarker.createFromOptions(
+          vision,
+          createFaceOptions("GPU")
+        );
+      } catch {
+        return await FaceLandmarker.createFromOptions(
+          vision,
+          createFaceOptions("CPU")
+        );
+      }
+    });
     console.log("[MediaPipe] FaceLandmarker initialised successfully");
     return faceLandmarkerInstance;
   })();
@@ -140,17 +201,19 @@ export async function initPoseLandmarker(): Promise<PoseLandmarker> {
 
   poseLandmarkerPromise = (async () => {
     const vision = await getVisionFileset();
-    try {
-      poseLandmarkerInstance = await PoseLandmarker.createFromOptions(
-        vision,
-        createPoseOptions("GPU")
-      );
-    } catch {
-      poseLandmarkerInstance = await PoseLandmarker.createFromOptions(
-        vision,
-        createPoseOptions("CPU")
-      );
-    }
+    poseLandmarkerInstance = await withMediaPipeStderrFilter(async () => {
+      try {
+        return await PoseLandmarker.createFromOptions(
+          vision,
+          createPoseOptions("GPU")
+        );
+      } catch {
+        return await PoseLandmarker.createFromOptions(
+          vision,
+          createPoseOptions("CPU")
+        );
+      }
+    });
     console.log("[MediaPipe] PoseLandmarker initialised successfully");
     return poseLandmarkerInstance;
   })();

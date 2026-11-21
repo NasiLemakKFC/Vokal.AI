@@ -30,6 +30,8 @@ import { drawVisionOverlay } from "@/lib/vision/visionOverlay";
 export interface UseVisionCoachOptions {
   /** Whether the camera is currently active and vision tracking should run. */
   enabled?: boolean;
+  /** When true, pauses the rAF inference loop and clears live nudges/overlay without unloading models. */
+  paused?: boolean;
   /** When true, frames count toward the session's cumulative scores & nudges. */
   trackSession?: boolean;
   /** When true, draws the minimal eye & body wireframe onto the canvas overlay. */
@@ -64,6 +66,7 @@ export function useVisionCoach(
 ): UseVisionCoachReturn {
   const {
     enabled = true,
+    paused = false,
     trackSession = true,
     showOverlay = true,
     nudgeDelaySec,
@@ -72,7 +75,6 @@ export function useVisionCoach(
 
   const [vision, setVision] = useState<VisionCoachFrameResult | null>(null);
   const [isModelReady, setIsModelReady] = useState(false);
-  const [isLoopRunning, setIsLoopRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const analyzerRef = useRef<VisionCoachAnalyzer | null>(null);
@@ -129,7 +131,54 @@ export function useVisionCoach(
     }
 
     let cancelled = false;
+
+    async function loadModels() {
+      try {
+        const [face, pose] = await Promise.all([
+          initFaceLandmarker(),
+          initPoseLandmarker(),
+        ]);
+        if (cancelled) return;
+
+        setError(null);
+        faceRef.current = face;
+        poseRef.current = pose;
+        setIsModelReady(true);
+      } catch (err) {
+        if (!cancelled) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : "Failed to load MediaPipe vision models.";
+          setError(msg);
+          console.error("[useVisionCoach] Init error:", msg);
+        }
+      }
+    }
+
+    loadModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  useEffect(() => {
     const analyzer = getAnalyzer();
+
+    if (!enabled || paused || !isModelReady) {
+      const canvas = webcamRef.current?.canvasElement;
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      analyzer.clearLiveState();
+      lastVideoTimeRef.current = -1;
+      return;
+    }
+
+    let cancelled = false;
+    lastVideoTimeRef.current = -1;
 
     function detect() {
       if (cancelled) return;
@@ -215,33 +264,7 @@ export function useVisionCoach(
       rafIdRef.current = requestAnimationFrame(detect);
     }
 
-    async function setup() {
-      try {
-        const [face, pose] = await Promise.all([
-          initFaceLandmarker(),
-          initPoseLandmarker(),
-        ]);
-        if (cancelled) return;
-
-        setError(null);
-        faceRef.current = face;
-        poseRef.current = pose;
-        setIsModelReady(true);
-        setIsLoopRunning(true);
-        rafIdRef.current = requestAnimationFrame(detect);
-      } catch (err) {
-        if (!cancelled) {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : "Failed to load MediaPipe vision models.";
-          setError(msg);
-          console.error("[useVisionCoach] Init error:", msg);
-        }
-      }
-    }
-
-    setup();
+    rafIdRef.current = requestAnimationFrame(detect);
 
     return () => {
       cancelled = true;
@@ -249,14 +272,17 @@ export function useVisionCoach(
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      setIsLoopRunning(false);
+      analyzer.clearLiveState();
+      setVision(null);
     };
-  }, [enabled, webcamRef, getAnalyzer]);
+  }, [enabled, paused, isModelReady, webcamRef, getAnalyzer]);
+
+  const isActive = enabled && !paused;
 
   return {
-    vision,
+    vision: isActive ? vision : null,
     isModelReady,
-    isDetecting: enabled && isLoopRunning,
+    isDetecting: isActive && isModelReady,
     error,
     calibratePosture,
     resetSession,

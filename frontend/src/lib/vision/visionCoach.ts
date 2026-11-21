@@ -324,18 +324,16 @@ export class VisionCoachAnalyzer {
     return true;
   }
 
-  /** Resets cumulative session counters and nudge timers (keeps calibration). */
-  public resetSession(): void {
-    this.totalFrames = 0;
-    this.goodPostureFrames = 0;
-    this.goodEyeFrames = 0;
-    this.postureNudgeCount = 0;
-    this.eyeNudgeCount = 0;
+  /** Clears live nudge timers, banners, and rolling window (preserves calibration & session summary). */
+  public clearLiveState(): void {
     this.badPostureStartMs = null;
     this.badEyeStartMs = null;
     this.postureNudgedFlag = false;
     this.eyeNudgedFlag = false;
     this.lastEyeOk = true;
+    this.rollingSamples = [];
+    this.prevTimeMs = 0;
+    this.currentFps = 0;
     this.eyeBannerState = {
       activeCue: null,
       shownAtMs: 0,
@@ -348,6 +346,16 @@ export class VisionCoachAnalyzer {
       resolvedCue: null,
       resolvedUntilMs: 0,
     };
+  }
+
+  /** Resets cumulative session counters and nudge timers (keeps calibration). */
+  public resetSession(): void {
+    this.totalFrames = 0;
+    this.goodPostureFrames = 0;
+    this.goodEyeFrames = 0;
+    this.postureNudgeCount = 0;
+    this.eyeNudgeCount = 0;
+    this.clearLiveState();
   }
 
   /** Manages sticky hold + green confirmation banner transitions for a channel. */

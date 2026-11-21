@@ -2,7 +2,11 @@ export function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[’']/g, "'").replace(/[^a-z0-9+#./\s-]/g, " ").replace(/\s+/g, " ").trim();
 }
 export function splitSentences(value: string): string[] {
-  return value.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+  return value
+    .split(/\n+/)
+    .flatMap((line) => line.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [])
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 export function includesKeyword(text: string, keyword: string): boolean {
   const normalizedKeyword = normalizeText(keyword);

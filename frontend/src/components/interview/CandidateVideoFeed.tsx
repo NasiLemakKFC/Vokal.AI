@@ -46,6 +46,9 @@ interface CandidateVideoFeedProps {
   onToggleSound?: () => void;
   /** Callback to recalibrate upright posture baseline. */
   onCalibratePosture?: () => boolean;
+  /** When false, vision tracking & nudges stay paused during preview (auto-resumes on Start answering). */
+  trackInPreview?: boolean;
+  onToggleTrackInPreview?: () => void;
 }
 
 /**
@@ -56,6 +59,7 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
   function CandidateVideoFeed(
     {
       metrics,
+      isSessionActive,
       className = "",
       selectedVideoId,
       isVideoOn = true,
@@ -73,12 +77,15 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
       soundEnabled = true,
       onToggleSound,
       onCalibratePosture,
+      trackInPreview = true,
+      onToggleTrackInPreview,
     },
     ref
   ) {
     const [showDebug, setShowDebug] = useState(false);
     const [calibratedFlash, setCalibratedFlash] = useState(false);
 
+    const isPreviewPaused = !isSessionActive && !trackInPreview;
     const eyeOk = metrics.eyeContact >= 70;
 
     const handleCalibrate = () => {
@@ -97,13 +104,13 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
           ref={ref}
           deviceId={selectedVideoId}
           isVideoOn={isVideoOn}
-          showDebugOverlay={showOverlay}
+          showDebugOverlay={showOverlay && !isPreviewPaused}
           onDevicesDiscovered={onDevicesDiscovered}
           className="absolute inset-0 w-full h-full rounded-none border-0"
         />
 
         {/* Top-center camera-anchored visual nudges + peripheral glow + earphone chime */}
-        {isVideoOn && (
+        {isVideoOn && !isPreviewPaused && (
           <VisualNudge
             eyeCue={eyeNudgeCue}
             postureCue={postureNudgeCue}
@@ -111,44 +118,53 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
           />
         )}
 
-        {/* Top-right: Eye contact score (or Vision loading status) */}
+        {/* Top-right: Eye contact score (or Vision loading / paused status) */}
         {isVideoOn && (
           <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
-            {!isVisionReady && !visionError && (
-              <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white/90 text-[11px] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse" />
-                Loading Vision AI…
-              </div>
-            )}
             {visionError && (
               <div className="h-[28px] px-2.5 rounded-[4px] bg-black/80 text-[#ffb4ab] text-[11px] flex items-center gap-1.5">
                 Vision AI error
               </div>
             )}
-            {isVisionReady && isCalibrating && (
-              <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-[#fde68a] text-[11px] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse" />
-                Calibrating…
+            {isPreviewPaused ? (
+              <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white/85 text-[11.5px] flex items-center gap-1.5 border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#9ca3af]" />
+                Tracker paused (preview)
               </div>
-            )}
-            {isVisionReady && (
-              <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white text-[12px] flex items-center gap-1.5">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    eyeOk ? "bg-[#4edea3]" : "bg-[#ffb4ab]"
-                  }`}
-                />
-                Eye contact{" "}
-                <span className="font-medium tabular-nums">
-                  {metrics.eyeContact}%
-                </span>
-              </div>
+            ) : (
+              <>
+                {!isVisionReady && !visionError && (
+                  <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white/90 text-[11px] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse" />
+                    Loading Vision AI…
+                  </div>
+                )}
+                {isVisionReady && isCalibrating && (
+                  <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-[#fde68a] text-[11px] flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse" />
+                    Calibrating…
+                  </div>
+                )}
+                {isVisionReady && (
+                  <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white text-[12px] flex items-center gap-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        eyeOk ? "bg-[#4edea3]" : "bg-[#ffb4ab]"
+                      }`}
+                    />
+                    Eye contact{" "}
+                    <span className="font-medium tabular-nums">
+                      {metrics.eyeContact}%
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
 
         {/* Bottom-left: Optional Module 4 Debug HUD */}
-        {isVideoOn && showDebug && visionDebug && (
+        {isVideoOn && !isPreviewPaused && showDebug && visionDebug && (
           <div className="absolute bottom-3 left-3 z-20 rounded-[6px] bg-black/80 border border-white/15 px-3 py-2 text-[11px] font-mono text-[#4edea3] leading-snug space-y-0.5 tabular-nums">
             <div>
               FPS: {visionDebug.fps.toFixed(1)} | Blink:{" "}
@@ -181,10 +197,10 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
           </div>
         )}
 
-        {/* Bottom-right: Calibrate, Lines, Delay (with hover info), Chime & Debug HUD */}
-        {isVideoOn && isVisionReady && (
-          <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5">
-            {onCalibratePosture && (
+        {/* Bottom-right: Calibrate, Lines, Delay (with hover info), Chime, HUD & Preview */}
+        {isVideoOn && (isVisionReady || onToggleTrackInPreview) && (
+          <div className="absolute bottom-3 right-3 z-20 flex flex-wrap justify-end max-w-[calc(100%-24px)] items-center gap-1.5">
+            {isVisionReady && !isPreviewPaused && onCalibratePosture && (
               <button
                 type="button"
                 onClick={handleCalibrate}
@@ -197,7 +213,7 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
                 {calibratedFlash ? "Calibrated" : "Calibrate"}
               </button>
             )}
-            {onToggleOverlay && (
+            {isVisionReady && onToggleOverlay && (
               <button
                 type="button"
                 onClick={onToggleOverlay}
@@ -214,7 +230,7 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
                 Lines
               </button>
             )}
-            {onCycleNudgeDelay && (
+            {isVisionReady && onCycleNudgeDelay && (
               <div className="relative group">
                 <button
                   type="button"
@@ -246,7 +262,7 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
                 </div>
               </div>
             )}
-            {onToggleSound && (
+            {isVisionReady && onToggleSound && (
               <button
                 type="button"
                 onClick={onToggleSound}
@@ -267,21 +283,66 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
                 Chime
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setShowDebug((v) => !v)}
-              title="Toggle Module 4 threshold debug HUD"
-              className={`h-[26px] px-2 rounded-[4px] text-[11px] font-medium border flex items-center gap-1 cursor-pointer transition-colors ${
-                showDebug
-                  ? "bg-[#1b6c80] text-white border-[#1b6c80]"
-                  : "bg-black/70 hover:bg-black/85 text-white border-white/15"
-              }`}
-            >
-              <span className="material-symbols-outlined text-[14px]">
-                tune
-              </span>
-              HUD
-            </button>
+            {isVisionReady && (
+              <button
+                type="button"
+                onClick={() => setShowDebug((v) => !v)}
+                title="Toggle Module 4 threshold debug HUD"
+                className={`h-[26px] px-2 rounded-[4px] text-[11px] font-medium border flex items-center gap-1 cursor-pointer transition-colors ${
+                  showDebug
+                    ? "bg-[#1b6c80] text-white border-[#1b6c80]"
+                    : "bg-black/70 hover:bg-black/85 text-white border-white/15"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">
+                  tune
+                </span>
+                HUD
+              </button>
+            )}
+            {onToggleTrackInPreview && (
+              <div className="relative group">
+                <button
+                  type="button"
+                  onClick={onToggleTrackInPreview}
+                  aria-pressed={trackInPreview}
+                  aria-label={
+                    trackInPreview
+                      ? "Turn off vision tracker during preview"
+                      : "Turn on vision tracker during preview"
+                  }
+                  className={`h-[26px] px-2 rounded-[4px] text-[11px] font-medium border flex items-center gap-1 cursor-pointer transition-colors ${
+                    trackInPreview
+                      ? "bg-[#1b6c80] text-white border-[#1b6c80]"
+                      : "bg-black/70 hover:bg-black/85 text-white border-white/15"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">
+                    {trackInPreview ? "visibility" : "visibility_off"}
+                  </span>
+                  {trackInPreview ? "Preview" : "Preview Off"}
+                </button>
+                <div
+                  role="tooltip"
+                  className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full right-0 mb-2 w-[235px] rounded-[6px] bg-[#131416]/95 border border-white/15 p-2.5 text-left shadow-xl z-40"
+                >
+                  <p className="text-[11.5px] font-semibold text-white">
+                    {trackInPreview
+                      ? "Preview Tracking (On)"
+                      : "Preview Tracking (Off)"}
+                  </p>
+                  <p className="text-[11px] text-white/80 mt-0.5 leading-snug">
+                    Turn off to ignore eye &amp; posture alerts before answering
+                    (e.g. while reading or pasting a job description).
+                  </p>
+                  <p className="text-[10.5px] text-[#4edea3] mt-1.5 font-medium">
+                    {isSessionActive
+                      ? "Active now — always runs while answering."
+                      : "Automatically resumes when you click Start answering."}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

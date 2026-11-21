@@ -70,19 +70,27 @@ export function analyzeAnswer(answerInput: string, optionsInput: AnalysisOptions
   if (!sections.action.found) coaching.push(sections.action.suggestion);
   else coaching.push("Your answer describes actions; make your personal contribution and decisions explicit.");
   if (!sections.result.found) coaching.push(sections.result.suggestion);
-  else if (!/\b\d+(?:\.\d+)?\s*(?:%|percent|seconds?|minutes?|hours?|days?|users?|customers?|requests?)\b/i.test(answer)) coaching.push("Your answer includes an outcome. Add a number or before-and-after comparison if you can.");
+  else if (!/\b\d+(?:\.\d+)?\s*(?:%|percent|peratus|ms|seconds?|saat|minutes?|minit|hours?|jam|days?|hari|users?|pengguna|customers?|pelanggan|requests?)\b/i.test(answer)) coaching.push("Your answer includes an outcome. Add a number or before-and-after comparison if you can.");
 
   // Question relevance is a transparent, conservative topic check, not semantic AI.
   // Only warn for clearly mismatched questions; never equate a missing word with a bad answer.
   const topicChecks: { question: RegExp; answer: RegExp; guidance: string }[] = [
-    { question: /automat(?:e|ed|ion|ing)|repetitive task/i, answer: /automat|script|repetitive|manual|scheduled|workflow|batch|time.saved/i, guidance: "This question asks about automating a repetitive task. Describe the manual process, the automation you built, and the time or effort saved." },
-    { question: /disagreement|conflict with|disagreed|teammate dispute/i, answer: /disagree|conflict|different opinions|compromise|discussion|teammate|dispute|agreement/i, guidance: "This question asks about resolving a disagreement. Explain both viewpoints, how you handled the discussion, and the final agreement." },
-    { question: /bug in production|critical bug|production issue/i, answer: /bug|production|incident|error|failure|outage|debug|deploy|fix/i, guidance: "This question asks about a production bug. Explain the incident, your investigation, your fix, and how you verified recovery." },
+    { question: /automat(?:e|ed|ion|ing)|repetitive task/i, answer: /automat|script|repetitive|manual|scheduled|workflow|batch|time.saved|berulang|tugas berulang|kerja berulang|jimat masa|skrip|aliran kerja/i, guidance: "This question asks about automating a repetitive task. Describe the manual process, the automation you built, and the time or effort saved." },
+    { question: /disagreement|conflict with|disagreed|teammate dispute/i, answer: /disagree|conflict|different opinions|compromise|discussion|teammate|dispute|agreement|perselisihan|konflik|tidak sependapat|salah faham|kompromi|berbincang|bincang|rakan sepasukan|sepakat/i, guidance: "This question asks about resolving a disagreement. Explain both viewpoints, how you handled the discussion, and the final agreement." },
+    { question: /bug in production|critical bug|production issue/i, answer: /bug|production|incident|error|failure|outage|debug|deploy|fix|ralat|masalah sistem|rosak|gangguan|crash|down|punca|baiki|betulkan|selesai|semak log/i, guidance: "This question asks about a production bug. Explain the incident, your investigation, your fix, and how you verified recovery." },
   ];
   const topic = topicChecks.find(t => t.question.test(options.question || ""));
   if (answer.trim() && topic && !topic.answer.test(answer)) coaching.unshift(`Question relevance: ${topic.guidance}`);
-  if (!sections.result.found && /(?:not reached|did not reach|had not reached|did not confirm|not yet resolved|still unresolved)/i.test(answer)) {
+  if (!sections.result.found && /\b(?:not reached|did not reach|had not reached|did not confirm|not yet resolved|still unresolved|tidak berjaya|tak berjaya|belum berjaya|belum selesai|masih belum selesai|belum diselesaikan)\b/i.test(answer)) {
     coaching.push("You described an unresolved situation. State what happened afterward, if known; do not invent a successful outcome.");
+  }
+  const bmCueMatches = answer.match(
+    /\b(?:saya|kami|masa|tugas|tanggungjawab|hasilnya|akhirnya|kerana|sebab|untuk|dengan|dalam|telah|sudah|berjaya|masalah|berbincang|selesaikan|semak|baiki|betulkan|lebih\s+laju|lebih\s+stabil)\b/gi
+  );
+  if (bmCueMatches && new Set(bmCueMatches.map((m) => m.toLowerCase())).size >= 2) {
+    coaching.push(
+      "Bilingual BM + English cues were recognised in your STAR analysis. For English-medium interviews, try rephrasing the BM parts into English on your next attempt."
+    );
   }
   const missing = scoredGroups.flatMap((group) => group.missing);
   if (missing.length) {
