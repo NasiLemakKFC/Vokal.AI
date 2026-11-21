@@ -1,129 +1,90 @@
-# Vokal.AI (InterViewAI) — Real-Time Multimodal AI Mock Interview Coach
+# Vokal.AI (InterViewAI)
 
-**Vokal.AI (InterViewAI)** is a privacy-first, multimodal AI mock interview coach built for Malaysian university students and fresh graduates preparing for behavioral (**STAR-method**) job interviews.
-
-> **Academic Context:** FTMK Workshop II (BITU 3973) — Universiti Teknikal Malaysia Melaka (UTeM)
+A privacy-first, multimodal AI mock interview coach for practicing behavioral (**STAR** — Situation, Task, Action, Result) interviews. It combines **resume & job description alignment**, **tailored question generation**, **real-time browser computer vision** (eye contact & posture), **Malaysian-tuned speech transcription & fluency analysis**, and **bilingual (EN + BM) STAR & keyword feedback**.
 
 ---
 
-## Core Modules & Team Ownership
+## How It Works
 
-| Module | Name | Owner | Status | Highlights |
-|---|---|---|---|---|
-| **Module 1** | Interview Question & Voice Response | **Amirul** | Integrated | Behavioral STAR question prompts, live session timer, browser microphone recording |
-| **Module 2** | Speech-to-Text & Data Processing | **Alia** | Integrated | FastAPI + `faster-whisper` (`mesolitica/malaysian-whisper-small-v3` `int8`), `Manglish (EN)` & `Auto (BM+EN)` modes |
-| **Module 3** | NLP & STAR Structure Analysis | **Syafiq** | Integrated | Client-side rule-based S/T/A/R sentence classifier, role & job-description keyword matching, coaching tips |
-| **Module 4** | Eye Contact & Posture Analysis | **Nabil** | Integrated | Browser-side MediaPipe `FaceLandmarker` + `PoseLandmarker`, blendshape/iris gaze + blink filtering, wireframe overlay & visual/audio nudges |
-| **Module 5** | Speech Fluency Analysis | **Alia** | Integrated | English + Manglish filler/slang detection (`um`, `uh`, `like`, `you know`, `lah`, `leh`, `lor`, `kan`), audio-signal pause detection, WPM & fluency score |
-| **Module 6** | Feedback & Performance Report | **Amirul** | In Progress | Session overview & reports UI (`/`, `/reports`), `localStorage` persistence + MongoDB schema integration |
+### 1. Pre-Session Setup & Resume Tailoring (`/interview`)
+- Expand the **Interview setup & resume check** card at the top of `/interview`.
+- Pick a mode (**Specific company**, **General job role**, or **General interview**), optionally paste a Job Description, and add your resume (**Upload PDF** or **Paste text**).
+- PDF text is extracted in memory on the server via `unpdf` (`POST /api/interview/parse-resume`) — no resume file is saved to disk.
+- Clicking **Analyze fit & generate questions** calls `POST /api/interview/prepare`, which runs your configured AI provider (**Groq**, **Gemini**, or **Ollama**) or falls back automatically to the built-in offline NLP generator:
+  - Produces a **Resume & JD Tailoring Report** (`matchScore`, verdict, matched vs. missing skills, and actionable tips), deterministically grounded against your actual resume text to prevent JD-to-resume hallucinations.
+  - Generates a balanced **STAR question set**: **Q1 (`Resume Deep-Dive`)** probing a real project/metric from your resume, **Q2 (`JD Gap`)** testing a missing skill from the job description, and **Q3+ (`Role Behavioral`)** anchored to role/company responsibilities.
 
----
+### 2. Live Practice Room (`/interview`)
+- **Client-Side Computer Vision (`@mediapipe/tasks-vision`)**: Runs 100% locally in your browser via WebGL/WASM (`FaceLandmarker` + `PoseLandmarker`). **No webcam video ever leaves the browser.**
+  - **Eye Contact & Gaze**: Combines head orientation (yaw/pitch), face blendshapes (`eyeLook*`), and iris landmarks with blink filtering (`eyeBlink*`) so natural blinking does not hurt your score.
+  - **Posture & Lean-In**: Auto-calibrates an upright baseline over the first 1.5 seconds and tracks shoulder tilt, slouching, and leaning too close to the camera.
+  - **Live Cues**: Optional minimal wireframe overlay, camera-anchored visual nudges (`Look at camera`, `Eyes up`, `Sit upright`, `Level shoulders`, `Move back`) with green confirmation once fixed, repeating Web Audio chimes (best with earphones), and configurable nudge delay (`1.5s`, `3s`, `5s`).
+- **Audio Capture & Live Transcript**: Record voice answers per question in the browser (`useAudioRecorder`), choose speech mode (**English (MY)** or **Mixed (BM+EN)**), or type/paste an answer directly in the transcript box for instant live STAR & keyword preview.
 
-## Key Features
-
-### 1. Client-Side Computer Vision Coaching (Module 4)
-All video processing runs **100% locally in the browser** via WebGL/WASM (`@mediapipe/tasks-vision`) — **no webcam video is ever uploaded**.
-- **Eye Contact & Gaze Tracking**: Combines head orientation (yaw/pitch) with MediaPipe face blendshapes (`eyeLook*`) and iris landmarks (`468`, `473`), plus blink filtering (`eyeBlink*`) so natural blinking does not penalize your score.
-- **Posture & Lean-In Tracking**: Monitors side-to-side shoulder tilt, vertical slouching against a **1.5-second median auto-calibrated baseline**, and leaning too close to the webcam.
-- **Minimal Wireframe Overlay (`Lines`)**: Draws clean eye contours, iris tracking rings, gaze vector, shoulder bar, spine axis, and a dashed upright target bracket over the mirrored `<canvas>`.
-- **Camera-Anchored Visual & Audio Nudges**:
-  - Top-center banners right below the webcam lens (`Look at camera`, `Eyes up`, `Sit upright`, `Level shoulders`, `Move back`) paired with a pulsing peripheral frame glow and camera-lens anchor dot.
-  - **Sticky Hold + Green Confirmation**: Active nudges stay readable (`800ms` min hold) and morph into a green `Good eye contact` / `Great posture` confirmation once corrected.
-  - **Repeating Earphone Chime (`Chime`)**: Synthesizes distinct Web Audio chimes that repeat until posture or gaze is corrected (best used with earphones so chimes do not bleed into the microphone).
-  - **Configurable Grace Period (`Delay`)**: Switch between `1.5s` (Strict), `3s` (Balanced), and `5s` (Relaxed).
-
-### 2. Malaysian-Tuned Speech & Fluency Pipeline (Modules 2 & 5)
-- **Malaysian Whisper (`mesolitica/malaysian-whisper-small-v3`)**: Converted to CTranslate2 (`int8`) via `backend/convert_malaysian_whisper.py` for fast CPU inference (`~1.5s` load) and improved recognition of Malaysian English accents and code-switching.
-- **Language Mode Toggle**: Switch between `Manglish (EN)` (English script with Malaysian particles) and `Auto (BM+EN)` (mixed Malay & English code-switching).
-- **Audio Preprocessing & VAD**: Applies `ffmpeg` `highpass=f=80` rumble filtering (preserving silence-vs-speech dB dynamics) and Silero VAD filtering.
-- **Malaysian Slang & Filler Detection**: Counts English fillers (`um`, `uh`, `like`, `you know`), soft fillers (`actually`, `basically`, `literally`), and Manglish particles (`lah`, `la`, `leh`, `lor`, `mah`, `kan`, `wei`, `bro`, `sis`), stripping them from `clean_text` before Module 3 NLP evaluation.
-
-### 3. Live NLP & STAR Breakdown (Module 3)
-- **Target Modes**: Evaluate answers against a **Specific company + Job Description**, a **General job role** (Software Engineer, Frontend, Backend, Data Analyst, AI/ML, UI/UX, QA, PM), or **General interview** skills.
-- **Interactive Practice Panel**: Automatically receives Module 2 voice transcripts (and supports direct typing/pasting) to render live **S/T/A/R chips**, **keyword coverage %**, **sentence-by-sentence classification**, and **personalized coaching tips**.
+### 3. Post-Session Analysis & Reports (`/reports`)
+- Clicking **Finish & analyze** runs a 1-by-1 evaluation modal across every answered question:
+  1. **Speech-to-Text & Fluency** (`POST /api/speech` → FastAPI `POST /analyze-speech`): Preprocesses audio via `ffmpeg` (`16 kHz` mono + `highpass=f=80`), transcribes with `faster-whisper` (`mesolitica/malaysian-whisper-small-v3` `int8` when converted, else `small`), measures WPM, detects `librosa` silence pauses (`> 2.0s`), and counts English + Manglish fillers (`um`, `uh`, `like`, `you know`, `lah`, `leh`, `lor`, `kan`, etc.), stripping fillers into `clean_text`.
+  2. **STAR & Keyword NLP** (`analyzeAnswer`): Classifies Situation/Task/Action/Result sentences, evaluates keyword coverage against the active question, job description, and role taxonomy (supporting English and Bahasa Melayu cues), and produces personalized tips.
+  3. **Vision Snapshot Merge**: Combines eye contact %, posture %, and nudge counts from the webcam session.
+- Results are saved to browser `localStorage` (`vokal-module3-completed-sessions-v1`) and can be inspected in the **Session STAR Review** modal or on **`/reports`** (including the saved **Resume & job description alignment** disclosure).
 
 ---
 
-## Architecture & Data Flow
+## Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────┐
-│                 BROWSER (Next.js App Router)             │
-│                                                          │
-│  Webcam (720p) ──► WebcamFeed + useVisionCoach           │
-│                     ├─ MediaPipe FaceLandmarker (GPU/CPU)│
-│                     ├─ MediaPipe PoseLandmarker (Lite)   │
-│                     └─ Minimal Wireframe + VisualNudge   │
-│                        (zero video leaves the browser)   │
-│                                                          │
-│  Mic Audio (WebM/M4A) ──► useAudioRecorder               │
-│                             │                            │
-│  Module 3 NLP ◄── clean_text┘   POST /api/speech         │
-└─────────────────────────────────────────┬────────────────┘
-                                          │ Audio Blob only
-                                          ▼
-┌──────────────────────────────────────────────────────────┐
-│              PYTHON BACKEND (FastAPI + Whisper)          │
-│                                                          │
-│  POST /analyze-speech                                    │
-│    ├─ ffmpeg (16 kHz mono WAV + highpass=f=80)           │
-│    ├─ faster-whisper (malaysian-whisper-small-v3 int8)   │
-│    ├─ librosa RMS silence-based long-pause detection     │
-│    └─ Module 5 fillers (EN + Manglish), WPM & fluency    │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                      BROWSER (Next.js App Router)                    │
+│                                                                      │
+│  Setup Card ──► PDF (.pdf) ──► POST /api/interview/parse-resume      │
+│             └─► Target/JD + Resume ──► POST /api/interview/prepare   │
+│                                                                      │
+│  Webcam (720p) ──► WebcamFeed + useVisionCoach                       │
+│                    ├─ MediaPipe FaceLandmarker & PoseLandmarker      │
+│                    └─ Wireframe Overlay + VisualNudge + Web Audio    │
+│                       (100% client-side; zero video uploaded)        │
+│                                                                      │
+│  Mic Audio ──► useAudioRecorder ──► POST /api/speech                 │
+│                                           │                          │
+│  Module 3 NLP & localStorage ◄────────────┼───────────┘              │
+└───────────────────────────────────────────┼──────────────────────────┘
+                                            │ Audio Blob only
+                                            ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                PYTHON SPEECH BACKEND (FastAPI :8000)                 │
+│                                                                      │
+│  POST /analyze-speech                                                │
+│    ├─ ffmpeg (16 kHz mono WAV + highpass=f=80)                       │
+│    ├─ faster-whisper (malaysian-whisper-small-v3 int8 / small)       │
+│    ├─ librosa RMS silence-based pause detection (> 2.0s)             │
+│    └─ WPM, EN + Manglish filler counts & fluency score               │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Framer Motion, Lucide React, Material Symbols
-- **Client-Side Vision AI**: `@mediapipe/tasks-vision` (`FaceLandmarker` + `PoseLandmarker`), Web Audio API
+- **Frontend**: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4, Framer Motion, Lucide React, Material Symbols
+- **Resume & AI Orchestration**: `unpdf` (PDF parsing), native `fetch` adapters for Groq, Gemini API, and Ollama + rule-based offline fallback
+- **Client-Side Vision**: `@mediapipe/tasks-vision` (`FaceLandmarker` + `PoseLandmarker`), Web Audio API
 - **Speech Backend**: Python 3.10 / 3.11, FastAPI, Uvicorn, `faster-whisper` (CTranslate2), `librosa`, `soundfile`, `ffmpeg`
-- **Database (Planned / Configured)**: MongoDB (`mongodb` official driver)
+- **Storage**: Browser `localStorage` (active session persistence) + `mongodb` driver (`src/lib/mongodb.js` helper available)
 
 ---
 
-## Repository Structure
+## Prerequisites
 
-```text
-WORKSHOP 2/
-├── README.md
-├── AGENTS.md                        # Project architecture & contributor guide
-├── MILESTONE.md                     # Workshop II milestone tracker
-├── backend/
-│   ├── main.py                      # FastAPI server (/health, POST /analyze-speech)
-│   ├── speech_module.py             # Module 2 (Whisper ASR) & Module 5 (speech analysis)
-│   ├── convert_malaysian_whisper.py # Converts mesolitica/malaysian-whisper-small-v3 -> CTranslate2 int8
-│   ├── requirements.txt             # Backend Python dependencies
-│   └── README.md                    # Backend API & Whisper notes
-└── frontend/
-    ├── package.json
-    └── src/
-        ├── app/
-        │   ├── api/speech/route.ts  # Next.js proxy forwarding audio to FastAPI
-        │   └── (dashboard)/
-        │       ├── page.tsx         # Home overview
-        │       ├── interview/       # Practice Room (Modules 1–5 live)
-        │       └── reports/         # Session Reports (Module 6)
-        ├── components/interview/    # WebcamFeed, CandidateVideoFeed, VisualNudge, Module3Analysis, etc.
-        ├── hooks/                   # useVisionCoach, useAudioRecorder, useMediaDevices, useFaceMesh
-        └── lib/
-            ├── speechApi.ts         # Typed client for /api/speech
-            ├── nlp/                 # Module 3 STAR, keyword, taxonomy & sessionStore engine
-            └── vision/              # MediaPipeSetup, visionCoach, visionOverlay, nudgeSound
-```
-
----
-
-## Getting Started (Local Setup)
-
-### Prerequisites
 - **Node.js** 20+ and **npm**
-- **Python** 3.10 or 3.11 (official Windows Python build recommended for prebuilt wheels)
-- **ffmpeg** installed on your `PATH` (Windows: `winget install Gyan.FFmpeg`)
+- **Python** 3.10 or 3.11
+- **`ffmpeg`** available on `PATH` (Windows: `winget install Gyan.FFmpeg`, then open a new terminal)
+- **Chrome** or **Edge** (for webcam/microphone `getUserMedia` and WebGL MediaPipe)
 
-### 1. Start the Speech Backend (Modules 2 & 5)
+---
+
+## Running Locally
+
+### 1. Start the Speech Backend (`backend/`)
 
 ```powershell
 cd backend
@@ -131,8 +92,8 @@ python -m venv venv
 .\venv\Scripts\activate            # macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
 
-# (Optional, recommended for Malaysian English & Manglish):
-# Install CPU PyTorch + Transformers once, then convert Mesolitica's model:
+# Optional (once, recommended for Malaysian English & Manglish):
+# Converts mesolitica/malaysian-whisper-small-v3 -> CTranslate2 int8
 pip install --index-url https://download.pytorch.org/whl/cpu torch
 pip install transformers
 python convert_malaysian_whisper.py
@@ -141,20 +102,40 @@ python convert_malaysian_whisper.py
 uvicorn main:app --port 8000
 ```
 
-Verify the backend is healthy by opening `http://localhost:8000/health` (expected: `{"status": "ok", "model": "malaysian-whisper-small-v3", "device": "cpu"}`).
+Verify it is running at `http://localhost:8000/health` (returns `status`, active `model`, and `device`).
 
-### 2. Start the Next.js Frontend
+> **Note:** The frontend works standalone for setup, resume tailoring, webcam vision coaching, and typed answers even if the speech backend is not running — you only need port `8000` when recording voice answers.
 
-Create `frontend/.env.local` (never commit this file):
+**Useful backend environment variables:**
+- `WHISPER_MODEL` — override the model name or path (defaults to `backend/models/malaysian-whisper-small-v3-ct2` if present, otherwise `small`)
+- `WHISPER_DEVICE` — set `cuda` to opt into GPU (defaults to CPU `int8`)
+- `WHISPER_LANGUAGE` — default `en` (`auto` for mixed BM+EN)
+- `PRELOAD_MODEL=0` — skip loading Whisper at server startup
+
+---
+
+### 2. Configure & Start the Frontend (`frontend/`)
+
+Copy `frontend/.env.example` to `frontend/.env.local` (never commit `.env.local`):
 
 ```env
-FASTAPI_BACKEND_URL=http://localhost:8000
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-# Optional for Module 6 MongoDB persistence:
-# MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/
+FASTAPI_BACKEND_URL=http://localhost:8000
+
+# AI Provider for Resume Tailoring & Question Generation
+# Options: auto | groq | gemini | ollama | offline
+AI_PROVIDER=auto
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=openai/gpt-oss-20b
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash-lite
+
+# Optional local Ollama (uncomment only if Ollama is installed and running)
+# OLLAMA_BASE_URL=http://127.0.0.1:11434
+# OLLAMA_MODEL=qwen2.5:3b
 ```
 
-Then install dependencies and launch the dev server:
+Install dependencies and start the Next.js dev server:
 
 ```powershell
 cd frontend
@@ -162,11 +143,94 @@ npm install
 npm run dev
 ```
 
-Open **`http://localhost:3000/interview`** in Chrome or Edge and allow camera & microphone permissions.
+Open **`http://localhost:3000/interview`** and grant camera/microphone permissions when prompted.
+
+> **Important:** Restart `npm run dev` whenever you edit `frontend/.env.local`.
 
 ---
 
-## Privacy & Demo Tips
-- **Zero Video Upload**: All MediaPipe inference stays inside browser memory.
-- **Use Earphones for Audio Chimes**: Prevents the Module 4 chime from entering the microphone recording sent to Whisper.
-- **Thermal Note**: During sustained local Whisper + MediaPipe testing on laptops, keep cooling active to maintain CPU thermals below 80°C.
+## AI Provider Options (`AI_PROVIDER`)
+
+| Setting | Model Default | Notes |
+|---|---|---|
+| `auto` (default) | — | Tries **Groq** → **Gemini** → explicit **Ollama** (`OLLAMA_BASE_URL`/`OLLAMA_MODEL` set) → **Offline NLP** |
+| `groq` | `openai/gpt-oss-20b` | Fast cloud inference, strict JSON Schema (`reasoning_effort: "low"`), zero local CPU/GPU load |
+| `gemini` | `gemini-2.5-flash-lite` | Cloud fallback via `generativelanguage.googleapis.com` JSON mode |
+| `ollama` | `qwen2.5:3b` | Fully offline local LLM via `http://127.0.0.1:11434/api/chat` |
+| `offline` | `rule-based-nlp` | Instant keyword/taxonomy matching + curated role/resume templates; zero API key needed |
+
+To avoid hitting rate limits or wasting tokens, inputs are compacted server-side (max `2,400` chars JD, `3,000` chars resume) and identical inputs are fingerprinted on the client unless you click **Regenerate questions** / **New angle**.
+
+---
+
+## Routes & API Endpoints
+
+| Route / Endpoint | Purpose |
+|---|---|
+| `/` | Home dashboard — latest score deltas and recent sessions |
+| `/interview` | Practice Room — setup card, webcam vision coach, audio recorder, and live Module 3 NLP |
+| `/reports` | Session reports — overall/pillar scores, STAR breakdown, speech/vision telemetry, transcript, and resume fit summary |
+| `POST /api/interview/parse-resume` | Extracts clean text from uploaded `.pdf` resumes (limit `5 MB`) |
+| `POST /api/interview/prepare` | Checks resume vs. JD alignment and generates tailored STAR questions |
+| `POST /api/speech` | Next.js proxy forwarding audio recordings to FastAPI `:8000/analyze-speech` |
+| `GET http://localhost:8000/health` | Speech backend health, active Whisper model, and device |
+| `POST http://localhost:8000/analyze-speech` | Whisper ASR + WPM, filler word, long-pause, and fluency analysis |
+
+---
+
+## Repository Structure
+
+```text
+.
+├── README.md
+├── AGENTS.md                        # Contributor & architecture notes
+├── backend/
+│   ├── main.py                      # FastAPI server (/health, POST /analyze-speech)
+│   ├── speech_module.py             # Whisper ASR + fluency & filler detection
+│   ├── convert_malaysian_whisper.py # Converts mesolitica/malaysian-whisper-small-v3 -> CTranslate2 int8
+│   ├── requirements.txt             # Python dependencies
+│   └── README.md                    # Speech backend reference
+└── frontend/
+    ├── next.config.ts               # Next.js config (serverExternalPackages: ["unpdf"], redirects)
+    ├── package.json
+    ├── .env.example
+    └── src/
+        ├── app/
+        │   ├── (dashboard)/
+        │   │   ├── page.tsx         # Home overview (/)
+        │   │   ├── interview/       # Practice Room (/interview)
+        │   │   └── reports/         # Session Reports (/reports)
+        │   └── api/
+        │       ├── speech/          # Proxy to FastAPI /analyze-speech
+        │       └── interview/
+        │           ├── parse-resume/# PDF text extraction (unpdf)
+        │           └── prepare/     # Resume check + AI/offline question generation
+        ├── components/interview/    # SessionSetupCard, QuestionPrompt, StarChecklist,
+        │                            # CandidateVideoFeed, WebcamFeed, ControlDock,
+        │                            # Module3Analysis, SessionAnalysisModal, VisualNudge
+        ├── hooks/                   # useVisionCoach, useAudioRecorder, useMediaDevices, useFaceMesh
+        └── lib/
+            ├── interview/           # types.ts, llmProvider.ts, offlineGenerator.ts
+            ├── nlp/                 # analyze.ts, star.ts, keywords.ts, taxonomy.ts, sessionStore.ts
+            ├── vision/              # MediaPipeSetup.ts, visionCoach.ts, visionOverlay.ts, nudgeSound.ts
+            ├── speechApi.ts         # Typed client for /api/speech
+            └── mongodb.js           # MongoDB client singleton
+```
+
+---
+
+## Tuning & Customization
+
+- **Eye Contact & Posture Thresholds**: Edit `DEFAULT_VISION_CONFIG` in `frontend/src/lib/vision/visionCoach.ts` (tilt angle, slouch drop ratio, lean-in ratio, gaze sensitivity, blink threshold, nudge delay).
+- **Whisper & Filler Rules**: Edit `CONFIG`, `FILLER_PROMPT`, and `FILLER_HOTWORDS` in `backend/speech_module.py` (ideal WPM band `120–160`, long pause threshold `2.0s`, VAD sensitivity, English/Manglish filler sets).
+- **Skill Taxonomy & Synonyms**: Edit `frontend/src/lib/nlp/taxonomy.ts` and `frontend/src/lib/nlp/keywords.ts`.
+
+---
+
+## Troubleshooting & Practical Tips
+
+- **`[browser] W... gl_context.cc / face_landmarker_graph.cc` in terminal**: Normal MediaPipe WebAssembly startup logs mirrored by Next.js — not errors.
+- **Speech analysis returns `502`**: Start the Python backend (`uvicorn main:app --port 8000` inside `backend/`) and verify `FASTAPI_BACKEND_URL=http://localhost:8000` in `frontend/.env.local`.
+- **PDF upload says no selectable text**: The PDF is likely a scanned image. Switch to the **Paste text** tab inside the setup card.
+- **Audio chimes bleed into recordings**: Wear earphones when **Chime** is enabled so the browser chime isn't picked up by your microphone.
+- **Laptop thermals**: Running local Whisper (`faster-whisper`) + webcam MediaPipe (and optionally local Ollama) concurrently is CPU-intensive; keep cooling active during extended sessions.
