@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 export interface MediaDeviceItem {
   deviceId: string;
@@ -15,19 +15,32 @@ export interface UseMediaDevicesReturn {
   selectedVideoId: string;
   setSelectedAudioId: (id: string) => void;
   setSelectedVideoId: (id: string) => void;
+  micGain: number;
+  setMicGain: (gain: number) => void;
+  noiseSuppression: boolean;
+  setNoiseSuppression: (enabled: boolean) => void;
   refreshDevices: () => Promise<void>;
   isPermissionGranted: boolean;
 }
 
 const STORAGE_KEY_MIC = "vokalai_selected_mic";
 const STORAGE_KEY_CAM = "vokalai_selected_cam";
+const STORAGE_KEY_MIC_GAIN = "vokalai_mic_gain";
+const STORAGE_KEY_NOISE_SUPPRESSION = "vokalai_noise_suppression";
+
+function clampMicGain(value: number): number {
+  return Math.min(3, Math.max(1, Math.round(value * 100) / 100));
+}
 
 export function useMediaDevices(): UseMediaDevicesReturn {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceItem[]>([]);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceItem[]>([]);
   const [selectedAudioId, setSelectedAudioIdState] = useState<string>("");
   const [selectedVideoId, setSelectedVideoIdState] = useState<string>("");
+  const [micGain, setMicGainState] = useState<number>(1.0);
+  const [noiseSuppression, setNoiseSuppressionState] = useState<boolean>(true);
   const [isPermissionGranted, setIsPermissionGranted] = useState<boolean>(false);
+  const hasHydratedPrefsRef = useRef(false);
 
   const refreshDevices = useCallback(async () => {
     if (typeof window === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
@@ -36,6 +49,20 @@ export function useMediaDevices(): UseMediaDevicesReturn {
 
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
+
+      if (!hasHydratedPrefsRef.current && typeof localStorage !== "undefined") {
+        hasHydratedPrefsRef.current = true;
+        const savedGain = Number(localStorage.getItem(STORAGE_KEY_MIC_GAIN));
+        if (Number.isFinite(savedGain) && savedGain >= 1 && savedGain <= 3) {
+          setMicGainState(clampMicGain(savedGain));
+        }
+        const savedNs = localStorage.getItem(STORAGE_KEY_NOISE_SUPPRESSION);
+        if (savedNs === "false") {
+          setNoiseSuppressionState(false);
+        } else if (savedNs === "true") {
+          setNoiseSuppressionState(true);
+        }
+      }
 
       const audio: MediaDeviceItem[] = [];
       const video: MediaDeviceItem[] = [];
@@ -115,6 +142,21 @@ export function useMediaDevices(): UseMediaDevicesReturn {
     }
   }, []);
 
+  const setMicGain = useCallback((gain: number) => {
+    const clamped = clampMicGain(gain);
+    setMicGainState(clamped);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY_MIC_GAIN, String(clamped));
+    }
+  }, []);
+
+  const setNoiseSuppression = useCallback((enabled: boolean) => {
+    setNoiseSuppressionState(enabled);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY_NOISE_SUPPRESSION, String(enabled));
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined" || !navigator.mediaDevices?.enumerateDevices) return;
 
@@ -149,6 +191,10 @@ export function useMediaDevices(): UseMediaDevicesReturn {
     selectedVideoId,
     setSelectedAudioId,
     setSelectedVideoId,
+    micGain,
+    setMicGain,
+    noiseSuppression,
+    setNoiseSuppression,
     refreshDevices,
     isPermissionGranted,
   };

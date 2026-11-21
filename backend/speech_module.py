@@ -55,7 +55,12 @@ CONFIG = {
     "whisper_options": {
         "condition_on_previous_text": True,
         "vad_filter": True,
-        "vad_parameters": {"min_silence_duration_ms": 600, "speech_pad_ms": 300},
+        "vad_parameters": {
+            "threshold": 0.35,              # default 0.50 drops softer / distant speech
+            "min_speech_duration_ms": 150,  # keeps brief fillers ("um", "lah") intact
+            "min_silence_duration_ms": 600,
+            "speech_pad_ms": 400,           # wider padding protects soft word starts/ends
+        },
     },
     "sample_rate": 16000,            # Hz, the format Whisper prefers
     "long_pause_sec": 2.0,           # gap above this = long pause
@@ -124,6 +129,48 @@ def preprocess_audio(in_path: str) -> str:
         ) from e
     sf.write(out_path, audio, sr)
     return out_path
+
+
+def prepare_audio_for_whisper(wav_path: str) -> str:
+    """Boost quiet/distant microphone recordings to a clean target speech level for Whisper,
+    leaving dead silence and already-loud close-mic clips untouched.
+    Kept separate from preprocess_audio so detect_pauses_audio runs on the un-boosted WAV."""
+    import librosa
+    import numpy as np
+    import soundfile as sf
+
+    audio, sr = sf.read(wav_path, dtype="float32")
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1)
+    if len(audio) == 0:
+        return wav_path
+
+    rms = librosa.feature.rms(y=audio, frame_length=1024, hop_length=256)[0]
+    rms_p95 = float(np.percentile(rms, 95)) if len(rms) > 0 else float(np.sqrt(np.mean(audio ** 2)))
+
+    # Leave dead silence and already-loud close-mic audio untouched.
+    if rms_p95 < 0.0015 or rms_p95 >= 0.12:
+        return wav_path
+
+    gain = min(0.15 / rms_p95, 15.0)
+    boosted = audio * gain
+
+    # Soft-clip limiter above knee so transient desk taps don't hard-clip or block speech gain.
+    knee = 0.85
+    ceiling = 0.96
+    headroom = ceiling - knee
+    abs_b = np.abs(boosted)
+    over = abs_b > knee
+    if np.any(over):
+        boosted = boosted.copy()
+        boosted[over] = np.sign(boosted[over]) * (
+            knee + headroom * np.tanh((abs_b[over] - knee) / headroom)
+        )
+
+    fd, norm_path = tempfile.mkstemp(suffix="_norm.wav")
+    os.close(fd)
+    sf.write(norm_path, boosted.astype(np.float32), sr)
+    return norm_path
 
 
 _model_cache = {}
@@ -207,8 +254,8 @@ def transcribe(wav_path: str, model_size: str = None, initial_prompt=_USE_DEFAUL
 
     model, device = _get_model(model_size)
 
-    def _run(whisper_model):
-        segments, info = whisper_model.transcribe(wav_path, **settings)
+    def _run(whisper_model, run_settings):
+        segments, info = whisper_model.transcribe(wav_path, **run_settings)
         words = []
         for seg in segments:
             if not seg.words:
@@ -221,16 +268,20 @@ def transcribe(wav_path: str, model_size: str = None, initial_prompt=_USE_DEFAUL
                 })
         return words, info.duration
 
+    active_model = model
     try:
-        words, duration = _run(model)
+        words, duration = _run(active_model, settings)
     except Exception:
         # Runtime CUDA DLL failures (e.g. missing cublas64_12.dll on Windows) happen on first transcribe.
         if device == "cuda":
             _model_cache.pop((_resolve_model_size(model_size), "cuda"), None)
-            cpu_model, _ = _get_model(model_size, force_cpu=True)
-            words, duration = _run(cpu_model)
+            active_model, _ = _get_model(model_size, force_cpu=True)
+            words, duration = _run(active_model, settings)
         else:
             raise
+
+    if not words and duration >= 0.5 and settings.get("vad_filter"):
+        words, duration = _run(active_model, {**settings, "vad_filter": False})
 
     return build_transcript(words, duration=duration)
 
@@ -472,15 +523,18 @@ def analyze_audio(audio_path: str, language=_USE_DEFAULT) -> dict:
     Full pipeline: audio file -> transcript (Module 2) -> speech metrics (Module 5).
     """
     wav = preprocess_audio(audio_path)
+    whisper_wav = wav
     try:
-        transcript = transcribe(wav, language=language)
+        whisper_wav = prepare_audio_for_whisper(wav)
+        transcript = transcribe(whisper_wav, language=language)
         audio_pauses = detect_pauses_audio(wav, transcript["words"])
         analysis = analyze_speech(transcript, audio_pauses)
     finally:
-        try:
-            Path(wav).unlink()          # remove the temporary 16 kHz copy
-        except OSError:
-            pass
+        for tmp in {wav, whisper_wav}:
+            try:
+                Path(tmp).unlink()          # remove temporary 16 kHz copies
+            except OSError:
+                pass
     return {"transcript": transcript, "speech_analysis": analysis}
 
 

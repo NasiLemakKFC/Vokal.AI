@@ -12,7 +12,18 @@ interface DeviceSettingsModalProps {
   selectedVideoId: string;
   onSelectAudio: (deviceId: string) => void;
   onSelectVideo: (deviceId: string) => void;
+  micGain?: number;
+  onChangeMicGain?: (gain: number) => void;
+  noiseSuppression?: boolean;
+  onToggleNoiseSuppression?: (enabled: boolean) => void;
   onRefreshDevices?: () => void;
+}
+
+function signalStatusLabel(level: number): string {
+  if (level <= 5) return "Speak to test";
+  if (level < 25) return `${level}% · Quiet`;
+  if (level <= 85) return `${level}% · Good`;
+  return `${level}% · Loud`;
 }
 
 export default function DeviceSettingsModal({
@@ -24,12 +35,25 @@ export default function DeviceSettingsModal({
   selectedVideoId,
   onSelectAudio,
   onSelectVideo,
+  micGain = 1.0,
+  onChangeMicGain,
+  noiseSuppression = true,
+  onToggleNoiseSuppression,
   onRefreshDevices,
 }: DeviceSettingsModalProps) {
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const micGainRef = useRef<number>(micGain);
   const micStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    micGainRef.current = micGain;
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = micGain;
+    }
+  }, [micGain]);
 
   const cleanupAudio = useCallback(() => {
     if (animationFrameRef.current) {
@@ -40,6 +64,7 @@ export default function DeviceSettingsModal({
       micStreamRef.current.getTracks().forEach((t) => t.stop());
       micStreamRef.current = null;
     }
+    gainNodeRef.current = null;
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
@@ -58,15 +83,20 @@ export default function DeviceSettingsModal({
           micStreamRef.current.getTracks().forEach((t) => t.stop());
           micStreamRef.current = null;
         }
+        gainNodeRef.current = null;
         if (audioContextRef.current && audioContextRef.current.state !== "closed") {
           audioContextRef.current.close().catch(() => {});
           audioContextRef.current = null;
         }
 
         const constraints: MediaStreamConstraints = {
-          audio: selectedAudioId
-            ? { deviceId: { ideal: selectedAudioId } }
-            : true,
+          audio: {
+            deviceId: selectedAudioId ? { ideal: selectedAudioId } : undefined,
+            channelCount: 1,
+            autoGainControl: true,
+            echoCancellation: true,
+            noiseSuppression,
+          },
           video: false,
         };
 
@@ -86,10 +116,14 @@ export default function DeviceSettingsModal({
         audioContextRef.current = ctx;
 
         const source = ctx.createMediaStreamSource(stream);
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = micGainRef.current;
+        gainNodeRef.current = gainNode;
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
         analyser.smoothingTimeConstant = 0.5;
-        source.connect(analyser);
+        source.connect(gainNode);
+        gainNode.connect(analyser);
 
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
@@ -120,7 +154,7 @@ export default function DeviceSettingsModal({
       isCancelled = true;
       cleanupAudio();
     };
-  }, [isOpen, selectedAudioId, cleanupAudio]);
+  }, [isOpen, selectedAudioId, noiseSuppression, cleanupAudio]);
 
   if (!isOpen) return null;
 
@@ -241,7 +275,7 @@ export default function DeviceSettingsModal({
                   Input Signal Check
                 </span>
                 <span className="tabular-nums text-[#131416] font-medium">
-                  {audioLevel > 5 ? `${audioLevel}%` : "Speak to test"}
+                  {signalStatusLabel(audioLevel)}
                 </span>
               </div>
               <div className="h-2 w-full bg-[#e8eaec] rounded-[2px] overflow-hidden flex">
@@ -251,6 +285,53 @@ export default function DeviceSettingsModal({
                 />
               </div>
             </div>
+
+            {onChangeMicGain && (
+              <div className="bg-[#f9fbfc] rounded-[6px] p-3 border border-[#e8eaec] space-y-1.5">
+                <div className="flex items-center justify-between text-[12px]">
+                  <label htmlFor="mic-gain-slider" className="font-medium text-[#131416]">
+                    Mic Sensitivity Boost
+                  </label>
+                  <span className="tabular-nums text-[#1b6c80] font-medium">
+                    {micGain <= 1.01
+                      ? "Normal (1.0×)"
+                      : `+${Math.round(20 * Math.log10(micGain))} dB (${micGain.toFixed(2)}×)`}
+                  </span>
+                </div>
+                <input
+                  id="mic-gain-slider"
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.25}
+                  value={micGain}
+                  onChange={(e) => onChangeMicGain(Number(e.target.value))}
+                  className="w-full accent-[#1b6c80] cursor-pointer"
+                />
+                <p className="text-[11px] text-[#5d5f60]">
+                  Increase if your mic sits further away on your desk.
+                </p>
+              </div>
+            )}
+
+            {onToggleNoiseSuppression && (
+              <label className="flex items-start gap-2.5 bg-[#f9fbfc] rounded-[6px] p-3 border border-[#e8eaec] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={noiseSuppression}
+                  onChange={(e) => onToggleNoiseSuppression(e.target.checked)}
+                  className="mt-0.5 accent-[#1b6c80] cursor-pointer"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-[12px] font-medium text-[#131416]">
+                    Background Noise Suppression
+                  </span>
+                  <span className="block text-[11px] text-[#5d5f60]">
+                    Filters fan &amp; room noise when sitting back. Turn off in a quiet room if soft fillers are missed.
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
 
           {/* Privacy Guarantee Notice */}

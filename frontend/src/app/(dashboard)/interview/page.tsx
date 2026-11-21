@@ -33,6 +33,10 @@ export default function PracticeRoom() {
     selectedVideoId,
     setSelectedAudioId,
     setSelectedVideoId,
+    micGain,
+    setMicGain,
+    noiseSuppression,
+    setNoiseSuppression,
     refreshDevices,
   } = useMediaDevices();
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
@@ -43,7 +47,11 @@ export default function PracticeRoom() {
     stop: stopRecording,
     cancel: cancelRecording,
     setMuted: setRecorderMuted,
-  } = useAudioRecorder(selectedAudioId);
+  } = useAudioRecorder({
+    deviceId: selectedAudioId,
+    micGain,
+    noiseSuppression,
+  });
   const [speech, setSpeech] = useState<SpeechAnalysisResponse | null>(null);
   const [speechLang, setSpeechLang] = useState<SpeechLanguageMode>("en");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -383,6 +391,10 @@ export default function PracticeRoom() {
         selectedVideoId={selectedVideoId}
         onSelectAudio={setSelectedAudioId}
         onSelectVideo={setSelectedVideoId}
+        micGain={micGain}
+        onChangeMicGain={setMicGain}
+        noiseSuppression={noiseSuppression}
+        onToggleNoiseSuppression={setNoiseSuppression}
         onRefreshDevices={refreshDevices}
       />
     </div>
