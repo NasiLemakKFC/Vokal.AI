@@ -17,8 +17,11 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import type { FaceLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
 import type { WebcamFeedHandle } from "@/components/interview/WebcamFeed";
 import {
+  areVisionModelsLoaded,
   initFaceLandmarker,
   initPoseLandmarker,
+  prewarmVisionFileset,
+  yieldToMainThread,
 } from "@/lib/vision/MediaPipeSetup";
 import {
   VisionCoachAnalyzer,
@@ -26,6 +29,15 @@ import {
   type VisionCoachFrameResult,
 } from "@/lib/vision/visionCoach";
 import { drawVisionOverlay } from "@/lib/vision/visionOverlay";
+
+export type VisionBootStage =
+  | "idle"
+  | "waiting_camera"
+  | "loading_wasm"
+  | "loading_face"
+  | "loading_pose"
+  | "ready"
+  | "error";
 
 export interface UseVisionCoachOptions {
   /** Whether the camera is currently active and vision tracking should run. */
@@ -47,6 +59,8 @@ export interface UseVisionCoachReturn {
   vision: VisionCoachFrameResult | null;
   /** True once both FaceLandmarker and PoseLandmarker are loaded. */
   isModelReady: boolean;
+  /** Current progressive loading stage for smooth non-blocking boot UX. */
+  bootStage: VisionBootStage;
   /** True while the requestAnimationFrame loop is actively running. */
   isDetecting: boolean;
   /** Non-null if MediaPipe failed to initialise. */
@@ -74,7 +88,12 @@ export function useVisionCoach(
   } = options;
 
   const [vision, setVision] = useState<VisionCoachFrameResult | null>(null);
-  const [isModelReady, setIsModelReady] = useState(false);
+  const [isModelReady, setIsModelReady] = useState<boolean>(() =>
+    areVisionModelsLoaded()
+  );
+  const [bootStage, setBootStage] = useState<VisionBootStage>(() =>
+    areVisionModelsLoaded() ? "ready" : "idle"
+  );
   const [error, setError] = useState<string | null>(null);
 
   const analyzerRef = useRef<VisionCoachAnalyzer | null>(null);
@@ -132,17 +151,67 @@ export function useVisionCoach(
 
     let cancelled = false;
 
-    async function loadModels() {
+    async function waitForCameraOrPaint(maxWaitMs = 420): Promise<void> {
+      const started = performance.now();
+      while (!cancelled && performance.now() - started < maxWaitMs) {
+        const video = webcamRef.current?.videoElement;
+        if (video && video.readyState >= 2) {
+          return;
+        }
+        await new Promise<void>((r) => window.setTimeout(r, 60));
+      }
+    }
+
+    async function loadModelsStaged() {
       try {
-        const [face, pose] = await Promise.all([
-          initFaceLandmarker(),
-          initPoseLandmarker(),
-        ]);
+        // Fast path: models are already compiled in singleton memory from an earlier visit
+        if (areVisionModelsLoaded()) {
+          const [face, pose] = await Promise.all([
+            initFaceLandmarker(),
+            initPoseLandmarker(),
+          ]);
+          if (cancelled) return;
+          faceRef.current = face;
+          poseRef.current = pose;
+          setError(null);
+          setBootStage("ready");
+          setIsModelReady(true);
+          return;
+        }
+
+        // Stage 1: Let the Practice Room UI paint and let the camera stream attach first
+        setBootStage("waiting_camera");
+        await yieldToMainThread(2);
+        await waitForCameraOrPaint(420);
         if (cancelled) return;
 
-        setError(null);
+        // Stage 2: Load WASM fileset runtime
+        setBootStage("loading_wasm");
+        await prewarmVisionFileset();
+        await yieldToMainThread(1);
+        if (cancelled) return;
+
+        // Stage 3: Compile FaceLandmarker (Eye Contact AI) first, then yield frames
+        setBootStage("loading_face");
+        await yieldToMainThread(1);
+        const face = await initFaceLandmarker();
+        if (cancelled) return;
         faceRef.current = face;
+
+        // Yield 2 animation frames so camera video & UI interactions stay silky-smooth
+        // between the two WebGL shader compilations
+        await yieldToMainThread(2);
+        if (cancelled) return;
+
+        // Stage 4: Compile PoseLandmarker (Posture AI)
+        setBootStage("loading_pose");
+        await yieldToMainThread(1);
+        const pose = await initPoseLandmarker();
+        if (cancelled) return;
         poseRef.current = pose;
+
+        setError(null);
+        setBootStage("ready");
         setIsModelReady(true);
       } catch (err) {
         if (!cancelled) {
@@ -151,17 +220,18 @@ export function useVisionCoach(
               ? err.message
               : "Failed to load MediaPipe vision models.";
           setError(msg);
+          setBootStage("error");
           console.error("[useVisionCoach] Init error:", msg);
         }
       }
     }
 
-    loadModels();
+    void loadModelsStaged();
 
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [enabled, webcamRef]);
 
   useEffect(() => {
     const analyzer = getAnalyzer();
@@ -282,6 +352,7 @@ export function useVisionCoach(
   return {
     vision: isActive ? vision : null,
     isModelReady,
+    bootStage: !enabled ? "idle" : bootStage,
     isDetecting: isActive && isModelReady,
     error,
     calibratePosture,

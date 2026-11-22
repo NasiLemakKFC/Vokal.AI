@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { analyzeAnswer } from "@/lib/nlp/analyze";
 import { extractJobDescriptionKeywords } from "@/lib/nlp/keywords";
 import { INTERVIEW_ROLES, type InterviewTarget } from "@/lib/interview/types";
-import type { StarKey } from "@/lib/nlp/types";
+import type { AnswerAnalysis, StarKey } from "@/lib/nlp/types";
 
 const STAR: { key: StarKey; letter: string; label: string }[] = [
   { key: "situation", letter: "S", label: "Situation" },
@@ -19,6 +19,11 @@ interface Module3AnalysisProps {
   target?: InterviewTarget;
   hideTargetConfig?: boolean;
   transcript?: string;
+  /** Optional pre-computed NLP analysis from parent to avoid duplicate evaluation on render. */
+  precomputedAnalysis?: AnswerAnalysis;
+  /** When true, wraps the panel in a collapsible drawer (closed by default to keep camera above the fold). */
+  collapsible?: boolean;
+  defaultExpanded?: boolean;
   onTranscriptChange?: (value: string) => void;
   onTargetChange?: (target: InterviewTarget) => void;
 }
@@ -29,9 +34,13 @@ export default function Module3Analysis({
   target,
   hideTargetConfig = false,
   transcript,
+  precomputedAnalysis,
+  collapsible = false,
+  defaultExpanded = false,
   onTranscriptChange,
   onTargetChange,
 }: Module3AnalysisProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [localMode, setLocalMode] = useState<"company" | "role" | "general">("role");
   const [localCompany, setLocalCompany] = useState("");
   const [localRole, setLocalRole] = useState("Software Engineer");
@@ -61,13 +70,14 @@ export default function Module3Analysis({
   };
   const analysis = useMemo(
     () =>
+      precomputedAnalysis ??
       analyzeAnswer(answer, {
         role: mode === "role" || mode === "company" ? role : "",
         jobDescription: mode !== "general" ? jobDescription : "",
         question,
         questionKeywords,
       }),
-    [answer, mode, role, jobDescription, question, questionKeywords]
+    [precomputedAnalysis, answer, mode, role, jobDescription, question, questionKeywords]
   );
   const jdKeywords = useMemo(
     () => (mode !== "general" ? extractJobDescriptionKeywords(jobDescription) : []),
@@ -75,21 +85,24 @@ export default function Module3Analysis({
   );
   const starCount = STAR.filter(({ key }) => analysis.star[key].found).length;
   const hasAnswer = answer.trim().length > 0;
+  const wordCount = hasAnswer ? answer.trim().split(/\s+/).length : 0;
 
-  return (
-    <section className="mt-6 space-y-4" aria-label="Module 3 NLP and STAR analysis">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[#1b6c80]">Module 03 · NLP</p>
-          <h2 className="text-[19px] font-semibold text-[#131416]">Answer intelligence</h2>
-          <p className="text-[13px] text-[#5d5f60] mt-1">
-            {hideTargetConfig
-              ? "Live STAR structure and target keyword coverage for your current answer."
-              : "Configure your target role, then review live STAR and keyword analysis."}
-          </p>
+  const panelBody = (
+    <div className={collapsible ? "border-t border-[#e8eaec] p-4 space-y-4" : "space-y-4"}>
+      {!collapsible && (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-[#1b6c80]">Module 03 · NLP</p>
+            <h2 className="text-[19px] font-semibold text-[#131416]">Answer intelligence</h2>
+            <p className="text-[13px] text-[#5d5f60] mt-1">
+              {hideTargetConfig
+                ? "Live STAR structure and target keyword coverage for your current answer."
+                : "Configure your target role, then review live STAR and keyword analysis."}
+            </p>
+          </div>
+          <span className="badge">Rule-based NLP · Live analysis</span>
         </div>
-        <span className="badge">Rule-based NLP · Live analysis</span>
-      </div>
+      )}
 
       {hideTargetConfig ? (
         <div className="card !py-3 flex flex-wrap items-center justify-between gap-2">
@@ -239,6 +252,64 @@ export default function Module3Analysis({
           <ul className="space-y-2">{analysis.coaching.map((tip, index) => <li key={index} className="flex gap-2 text-[13px] text-[#45474a]"><span className="text-[#1b6c80]">•</span><span>{tip}</span></li>)}</ul>}
       </div>
       <p className="text-[11px] leading-relaxed text-[#8b8d90]">Analysis note: this module uses transparent, rule-based keyword matching and sentence-pattern heuristics. It does not understand meaning like a trained language model; wording variations, implied STAR elements, and synonyms may be missed or misclassified. Treat results as coaching guidance, not an automated hiring score.</p>
+    </div>
+  );
+
+  if (!collapsible) {
+    return (
+      <section className="mt-6" aria-label="Module 3 NLP and STAR analysis">
+        {panelBody}
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="mt-4 rounded-[8px] border border-[#e8eaec] bg-white overflow-hidden"
+      aria-label="Module 3 NLP and STAR analysis"
+    >
+      <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 bg-[#f9fbfc]">
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+          className="flex items-center gap-2.5 text-left min-w-0 flex-1 cursor-pointer group"
+        >
+          <span className="w-7 h-7 rounded-[6px] bg-[#eef4f6] border border-[#b8d4dc] text-[#134e5e] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[16px]">psychology</span>
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13.5px] font-semibold text-[#131416] group-hover:text-[#1b6c80] transition-colors">
+                Transcript &amp; live NLP analysis
+              </span>
+              <span className={starCount >= 3 ? "pill-positive" : "badge"}>
+                STAR {starCount}/4
+              </span>
+              <span className="badge tabular-nums">
+                Keywords {analysis.coverage}%
+              </span>
+              <span className="badge tabular-nums">
+                {hasAnswer ? `${wordCount} words` : "Type or paste transcript"}
+              </span>
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+          className="h-[28px] px-2.5 rounded-[6px] border border-[#cdced1] bg-white hover:bg-[#f4f6f8] text-[12px] font-medium text-[#131416] flex items-center gap-1 cursor-pointer shrink-0"
+        >
+          {isExpanded ? "Hide drawer" : "Open drawer"}
+          <span className="material-symbols-outlined text-[16px] text-[#5d5f60]">
+            {isExpanded ? "expand_less" : "expand_more"}
+          </span>
+        </button>
+      </div>
+
+      {isExpanded && panelBody}
     </section>
   );
 }

@@ -95,6 +95,7 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
     useEffect(() => {
       let stream: MediaStream | null = null;
       let isCancelled = false;
+      let discoverTimer: ReturnType<typeof setTimeout> | null = null;
       const videoElement = videoRef.current;
 
       async function startWebcam() {
@@ -142,7 +143,12 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
 
             if (!isCancelled) {
               setStatus("active");
-              onDevicesDiscovered?.();
+              // Defer device re-enumeration slightly so camera first-frame paint is never blocked
+              discoverTimer = setTimeout(() => {
+                if (!isCancelled) {
+                  onDevicesDiscovered?.();
+                }
+              }, 180);
             }
           }
         } catch (err) {
@@ -172,6 +178,9 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
       // Cleanup: stop all tracks when unmounting or switching device
       return () => {
         isCancelled = true;
+        if (discoverTimer) {
+          clearTimeout(discoverTimer);
+        }
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
         }
@@ -186,11 +195,23 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
       <div
         className={`relative overflow-hidden rounded-[6px] border border-[#e8eaec] bg-[#0f1419] ${className}`}
       >
-        {/* ── Loading State ─────────────────────────────────────────────── */}
+        {/* ── Loading State (Dark Studio Surface — prevents harsh white flash) ── */}
         {(status === "idle" || status === "requesting") && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-[#5d5f60] bg-[#f9fbfc]">
-            <Loader2 className="h-7 w-7 animate-spin text-[#1b6c80]" />
-            <p className="text-[13px] font-medium text-[#131416]">Requesting camera access…</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0f1419] text-white/90 select-none">
+            <div className="relative flex items-center justify-center">
+              <span className="absolute h-12 w-12 rounded-full bg-[#1b6c80]/25 animate-ping" />
+              <div className="relative w-11 h-11 rounded-full bg-white/5 border border-white/15 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-[#4edea3]" />
+              </div>
+            </div>
+            <div className="text-center space-y-0.5 px-4">
+              <p className="text-[13px] font-medium text-white">
+                Starting HD camera…
+              </p>
+              <p className="text-[11.5px] text-white/60">
+                Video stays 100% on your device
+              </p>
+            </div>
           </div>
         )}
 
@@ -220,10 +241,10 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
         )}
 
         {/* ── Live Video Feed ───────────────────────────────────────────── */}
-        {/* Always rendered so the stream can attach; hidden visually only on error states */}
+        {/* Always rendered so the stream can attach; fades in smoothly once active */}
         <video
           ref={videoRef}
-          className={`absolute inset-0 h-full w-full object-cover ${
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
             status === "active" ? "opacity-100" : "opacity-0"
           }`}
           style={{ transform: "scaleX(-1)" }} // Mirror for natural UX

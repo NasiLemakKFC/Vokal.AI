@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { prewarmVisionFileset } from "@/lib/vision/MediaPipeSetup";
 
 interface NavItem {
   label: string;
@@ -56,6 +57,16 @@ function NavList({
             key={item.href}
             href={item.href}
             onClick={onNavigate}
+            onMouseEnter={() => {
+              if (item.href === "/interview") {
+                void prewarmVisionFileset();
+              }
+            }}
+            onFocus={() => {
+              if (item.href === "/interview") {
+                void prewarmVisionFileset();
+              }
+            }}
             title={collapsed ? item.label : undefined}
             aria-current={isActive ? "page" : undefined}
             className={`h-[34px] flex items-center gap-2.5 rounded-[6px] text-[14px] transition-colors ${

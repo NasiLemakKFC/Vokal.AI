@@ -3,6 +3,7 @@
 import { forwardRef, useState } from "react";
 import WebcamFeed, { type WebcamFeedHandle } from "@/components/interview/WebcamFeed";
 import VisualNudge from "@/components/interview/VisualNudge";
+import type { VisionBootStage } from "@/hooks/useVisionCoach";
 import {
   DEFAULT_VISION_CONFIG,
   type VisionDebugMetrics,
@@ -31,6 +32,8 @@ interface CandidateVideoFeedProps {
   visionDebug?: VisionDebugMetrics | null;
   /** True once MediaPipe FaceLandmarker & PoseLandmarker have loaded. */
   isVisionReady?: boolean;
+  /** Progressive vision boot stage for smooth non-blocking load feedback. */
+  visionBootStage?: VisionBootStage;
   /** True during initial 1.5s posture auto-calibration. */
   isCalibrating?: boolean;
   /** Optional error message if MediaPipe vision failed to load. */
@@ -68,6 +71,7 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
       postureNudgeCue = null,
       visionDebug = null,
       isVisionReady = false,
+      visionBootStage = "idle",
       isCalibrating = false,
       visionError = null,
       showOverlay = true,
@@ -134,9 +138,36 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
             ) : (
               <>
                 {!isVisionReady && !visionError && (
-                  <div className="h-[28px] px-2.5 rounded-[4px] bg-black/70 text-white/90 text-[11px] flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse" />
-                    Loading Vision AI…
+                  <div className="h-[28px] px-2.5 rounded-[4px] bg-black/75 border border-white/10 text-white/95 text-[11px] flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#fde68a] animate-pulse shrink-0" />
+                    <span className="tabular-nums">
+                      {visionBootStage === "waiting_camera"
+                        ? "Syncing camera…"
+                        : visionBootStage === "loading_wasm"
+                          ? "Starting Vision engine…"
+                          : visionBootStage === "loading_face"
+                            ? "Loading Eye AI (1/2)…"
+                            : visionBootStage === "loading_pose"
+                              ? "Loading Posture AI (2/2)…"
+                              : "Loading Vision AI…"}
+                    </span>
+                    <span className="w-8 h-1 rounded-full bg-white/15 overflow-hidden shrink-0">
+                      <span
+                        className="block h-full bg-[#4edea3] transition-all duration-300 ease-out"
+                        style={{
+                          width:
+                            visionBootStage === "waiting_camera"
+                              ? "20%"
+                              : visionBootStage === "loading_wasm"
+                                ? "40%"
+                                : visionBootStage === "loading_face"
+                                  ? "65%"
+                                  : visionBootStage === "loading_pose"
+                                    ? "90%"
+                                    : "30%",
+                        }}
+                      />
+                    </span>
                   </div>
                 )}
                 {isVisionReady && isCalibrating && (

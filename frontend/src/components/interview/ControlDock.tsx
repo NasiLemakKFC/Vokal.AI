@@ -4,6 +4,8 @@ interface ControlDockProps {
   isMicOn: boolean;
   isVideoOn: boolean;
   isSessionActive: boolean;
+  /** Live microphone voice level (0–100) while recording. */
+  audioLevel?: number;
   disabled?: boolean;
   hasRecordedCurrent?: boolean;
   isLastQuestion?: boolean;
@@ -55,6 +57,7 @@ export default function ControlDock({
   isMicOn,
   isVideoOn,
   isSessionActive,
+  audioLevel = 0,
   disabled = false,
   hasRecordedCurrent = false,
   isLastQuestion = false,
@@ -67,15 +70,16 @@ export default function ControlDock({
   onFinishSession,
 }: ControlDockProps) {
   const canHighlightFinish = readyAnswerCount > 0 || isSessionActive;
+  const barThresholds = [10, 28, 48, 70];
 
   return (
-    <div className="sticky bottom-4 z-30 mt-5 rounded-[8px] border border-[#e8eaec] bg-white px-3 py-2.5 flex items-center justify-between gap-3">
+    <div className="sticky bottom-4 z-30 mt-5 rounded-[8px] border border-[#e8eaec] bg-white/95 backdrop-blur-sm px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-2">
         <IconToggle
           on={isMicOn}
           iconOn="mic"
           iconOff="mic_off"
-          label={isMicOn ? "Mute mic" : "Unmute mic"}
+          label={isMicOn ? "Mute mic (M)" : "Unmute mic (M)"}
           disabled={disabled}
           onClick={onToggleMic}
         />
@@ -97,12 +101,60 @@ export default function ControlDock({
         >
           <span className="material-symbols-outlined text-[18px]">settings</span>
         </button>
+
+        {/* Live Mic Confidence Pill while recording */}
+        {isSessionActive && (
+          <div
+            aria-live="polite"
+            title={
+              isMicOn
+                ? "Live microphone input level"
+                : "Microphone is muted — click Mic or press M to unmute"
+            }
+            className={`hidden sm:flex h-[32px] px-2.5 rounded-[6px] border items-center gap-2 text-[11.5px] font-medium transition-colors ${
+              !isMicOn
+                ? "bg-[#ffedea] border-[#f5c2c7] text-[#831c1e]"
+                : "bg-[#f9fbfc] border-[#e8eaec] text-[#131416]"
+            }`}
+          >
+            {!isMicOn ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-[#c4242a]" />
+                <span>Mic muted</span>
+              </>
+            ) : (
+              <>
+                <div className="flex items-end gap-[2.5px] h-3.5" aria-hidden="true">
+                  {barThresholds.map((threshold, idx) => {
+                    const active = audioLevel >= threshold;
+                    const heightPx = 5 + idx * 3;
+                    return (
+                      <span
+                        key={threshold}
+                        className={`w-[3px] rounded-full transition-all duration-75 ${
+                          active ? "bg-[#1e7b4f]" : "bg-[#cdced1]"
+                        }`}
+                        style={{
+                          height: `${active ? Math.min(14, heightPx + 2) : heightPx}px`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[#45474a]">
+                  {audioLevel >= 12 ? "Voice detected" : "Listening…"}
+                </span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <button
         type="button"
         disabled={disabled}
         onClick={onToggleSession}
+        title="Shortcut: Spacebar"
         className={`h-[36px] px-4 rounded-[6px] text-[13px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
           isSessionActive
             ? "bg-[#ffedea] text-[#831c1e] hover:bg-[#fbd7d1]"
@@ -114,11 +166,25 @@ export default function ControlDock({
         <span className="material-symbols-outlined text-[18px]">
           {isSessionActive ? "stop" : hasRecordedCurrent ? "replay" : "play_arrow"}
         </span>
-        {isSessionActive
-          ? "Stop answering"
-          : hasRecordedCurrent
-            ? "Re-record answer"
-            : "Start answering"}
+        <span>
+          {isSessionActive
+            ? "Stop answering"
+            : hasRecordedCurrent
+              ? "Re-record answer"
+              : "Start answering"}
+        </span>
+        <kbd
+          aria-hidden="true"
+          className={`hidden md:inline-block ml-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-mono leading-none ${
+            isSessionActive
+              ? "bg-[#fbd7d1] text-[#831c1e]"
+              : hasRecordedCurrent
+                ? "bg-[#dfecef] text-[#134e5e]"
+                : "bg-white/20 text-white"
+          }`}
+        >
+          Space
+        </kbd>
       </button>
 
       {isLastQuestion ? (
@@ -140,10 +206,17 @@ export default function ControlDock({
           type="button"
           disabled={disabled}
           onClick={() => onNextQuestion?.()}
+          title="Shortcut: Alt + Right Arrow"
           className="h-[36px] px-3 rounded-[6px] border border-[#cdced1] bg-white text-[#131416] hover:bg-[#f4f6f8] text-[13px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Next
+          <span>Next</span>
           <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          <kbd
+            aria-hidden="true"
+            className="hidden md:inline-block ml-0.5 px-1.5 py-0.5 rounded-[4px] bg-[#f4f6f8] border border-[#e8eaec] text-[10px] font-mono text-[#5d5f60] leading-none"
+          >
+            Alt+→
+          </kbd>
         </button>
       )}
     </div>

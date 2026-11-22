@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useMediaDevices } from "@/hooks/useMediaDevices";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
@@ -25,13 +26,24 @@ import StarChecklist, { type StarProgress } from "@/components/interview/StarChe
 import LiveCoachingTip from "@/components/interview/LiveCoachingTip";
 import CandidateVideoFeed from "@/components/interview/CandidateVideoFeed";
 import ControlDock from "@/components/interview/ControlDock";
-import DeviceSettingsModal from "@/components/interview/DeviceSettingsModal";
-import Module3Analysis from "@/components/interview/Module3Analysis";
-import SessionAnalysisModal, {
-  type AnalysisModalPhase,
-  type AnalysisQueueItem,
+import type {
+  AnalysisModalPhase,
+  AnalysisQueueItem,
 } from "@/components/interview/SessionAnalysisModal";
 import type { WebcamFeedHandle } from "@/components/interview/WebcamFeed";
+
+const Module3Analysis = dynamic(
+  () => import("@/components/interview/Module3Analysis"),
+  { ssr: false }
+);
+const DeviceSettingsModal = dynamic(
+  () => import("@/components/interview/DeviceSettingsModal"),
+  { ssr: false }
+);
+const SessionAnalysisModal = dynamic(
+  () => import("@/components/interview/SessionAnalysisModal"),
+  { ssr: false }
+);
 import {
   DEFAULT_QUESTIONS,
   type AiProviderUsed,
@@ -283,6 +295,7 @@ export default function PracticeRoom() {
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
 
   const {
+    audioLevel,
     start: startRecording,
     stop: stopRecording,
     cancel: cancelRecording,
@@ -322,7 +335,7 @@ export default function PracticeRoom() {
   } | null>(null);
   const [isGeneratingPrep, setIsGeneratingPrep] = useState(false);
   const [prepError, setPrepError] = useState<string | null>(null);
-  const [isSetupExpanded, setIsSetupExpanded] = useState(true);
+  const [isSetupExpanded, setIsSetupExpanded] = useState(false);
   const [lastPrepFingerprint, setLastPrepFingerprint] = useState<string | null>(null);
   const variationRef = useRef(0);
 
@@ -362,6 +375,7 @@ export default function PracticeRoom() {
   const {
     vision,
     isModelReady: isVisionReady,
+    bootStage: visionBootStage,
     error: visionError,
     calibratePosture,
     resetSession: resetVisionSession,
@@ -471,6 +485,12 @@ export default function PracticeRoom() {
 
   const handleNext = () => {
     void handleSelectQuestion((questionIndex + 1) % questions.length);
+  };
+
+  const handlePrev = () => {
+    void handleSelectQuestion(
+      (questionIndex - 1 + questions.length) % questions.length
+    );
   };
 
   const handleGeneratePreparation = async (options?: { forceRegenerate?: boolean }) => {
@@ -765,6 +785,73 @@ export default function PracticeRoom() {
   );
   const canFinish = readyAnswerCount > 0 || isSessionActive;
 
+  // Keyboard shortcuts: Space = start/stop recording, M = toggle mic, Alt+Right/Left = next/prev question
+  const shortcutActionsRef = useRef({
+    toggleSession: handleToggleSession,
+    nextQuestion: handleNext,
+    prevQuestion: handlePrev,
+    toggleMic: () => setIsMicOn((v) => !v),
+    disabled: isModalOpen || isDeviceModalOpen || isGeneratingPrep,
+  });
+  useEffect(() => {
+    shortcutActionsRef.current = {
+      toggleSession: handleToggleSession,
+      nextQuestion: handleNext,
+      prevQuestion: handlePrev,
+      toggleMic: () => setIsMicOn((v) => !v),
+      disabled: isModalOpen || isDeviceModalOpen || isGeneratingPrep,
+    };
+  });
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (shortcutActionsRef.current.disabled) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.tagName === "INPUT" ||
+          el.tagName === "TEXTAREA" ||
+          el.tagName === "SELECT" ||
+          el.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.code === "Space" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        // Only intercept Space when focus isn't already on a button (avoid double-trigger)
+        if (el && el.tagName === "BUTTON") return;
+        e.preventDefault();
+        void shortcutActionsRef.current.toggleSession();
+      } else if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        shortcutActionsRef.current.nextQuestion();
+      } else if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        shortcutActionsRef.current.prevQuestion();
+      } else if (
+        (e.key === "m" || e.key === "M") &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey
+      ) {
+        e.preventDefault();
+        shortcutActionsRef.current.toggleMic();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Pacing timer cues: 90s–150s (1:30–2:30) is the ideal behavioral STAR response duration
+  const timerPacingState =
+    elapsedSeconds === 0 && !isSessionActive
+      ? "idle"
+      : elapsedSeconds < 90
+        ? "building"
+        : elapsedSeconds <= 150
+          ? "optimal"
+          : "wrap_up";
+
   return (
     <div className="max-w-[1180px] mx-auto pb-10">
       <SessionSetupCard
@@ -838,13 +925,37 @@ export default function PracticeRoom() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="h-[30px] px-2.5 rounded-[6px] border border-[#e8eaec] flex items-center gap-1.5 text-[13px] font-medium text-[#131416] tabular-nums">
+          <span
+            title="Target STAR answer length: 1:30 to 2:30"
+            className={`h-[30px] px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[13px] font-medium tabular-nums transition-colors ${
+              timerPacingState === "optimal"
+                ? "bg-[#dcfae5] text-[#04250e] border-[#b5e8c5]"
+                : timerPacingState === "wrap_up"
+                  ? "bg-[#fffbeb] text-[#92400e] border-[#fde68a]"
+                  : "bg-white text-[#131416] border-[#e8eaec]"
+            }`}
+          >
             <span
               className={`w-2 h-2 rounded-full ${
-                isSessionActive ? "bg-[#c4242a]" : "bg-[#cdced1]"
+                isSessionActive
+                  ? timerPacingState === "optimal"
+                    ? "bg-[#1e7b4f] animate-pulse"
+                    : timerPacingState === "wrap_up"
+                      ? "bg-[#a86f0c] animate-pulse"
+                      : "bg-[#c4242a] animate-pulse"
+                  : "bg-[#cdced1]"
               }`}
             />
-            {formatDuration(elapsedSeconds)}
+            <span>{formatDuration(elapsedSeconds)}</span>
+            {isSessionActive && (
+              <span className="hidden sm:inline text-[11px] font-normal opacity-80">
+                {timerPacingState === "optimal"
+                  ? "· Optimal 1:30–2:30"
+                  : timerPacingState === "wrap_up"
+                    ? "· Wrap up soon"
+                    : "· Target 1:30+"}
+              </span>
+            )}
           </span>
           <button
             type="button"
@@ -892,6 +1003,7 @@ export default function PracticeRoom() {
             postureNudgeCue={vision?.postureNudgeCue ?? null}
             visionDebug={vision?.debug ?? null}
             isVisionReady={isVisionReady}
+            visionBootStage={visionBootStage}
             isCalibrating={vision?.isCalibrating ?? false}
             visionError={visionError}
             showOverlay={showVisionOverlay}
@@ -1011,6 +1123,7 @@ export default function PracticeRoom() {
         isMicOn={isMicOn}
         isVideoOn={isVideoOn}
         isSessionActive={isSessionActive}
+        audioLevel={audioLevel}
         disabled={isModalOpen}
         hasRecordedCurrent={hasCurrentRecording}
         isLastQuestion={questionIndex === questions.length - 1}
@@ -1023,13 +1136,16 @@ export default function PracticeRoom() {
         onFinishSession={() => void handleFinishSession()}
       />
 
-      {/* Module 3: Full interactive NLP & STAR analysis panel */}
+      {/* Module 3: Collapsible interactive NLP & STAR analysis drawer */}
       <Module3Analysis
         question={currentQuestion}
         questionKeywords={currentQuestionItem.keywords}
         target={target}
         hideTargetConfig
+        collapsible
+        defaultExpanded={false}
         transcript={transcript}
+        precomputedAnalysis={analysis}
         onTranscriptChange={handleTranscriptChange}
       />
 

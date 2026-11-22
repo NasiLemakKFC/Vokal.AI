@@ -20,6 +20,8 @@ export interface AudioRecorderOptions {
 
 export interface UseAudioRecorderReturn {
   isRecording: boolean;
+  /** Live microphone voice activity level (0–100) while recording; 0 when idle or muted. */
+  audioLevel: number;
   /** Ask for the microphone and begin recording one answer. */
   start: () => Promise<void>;
   /** Stop and return the recorded audio (null if nothing was recording). */
@@ -35,11 +37,18 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mutedRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
 
   const releaseStream = useCallback(() => {
+    if (levelTimerRef.current) {
+      clearInterval(levelTimerRef.current);
+      levelTimerRef.current = null;
+    }
+    setAudioLevel(0);
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
@@ -50,6 +59,9 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
 
   const setMuted = useCallback((muted: boolean) => {
     mutedRef.current = muted;
+    if (muted) {
+      setAudioLevel(0);
+    }
     streamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = !muted;
     });
@@ -73,17 +85,25 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
 
     let recordStream = stream;
     try {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioContextClass();
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+      const source = ctx.createMediaStreamSource(stream);
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = micGain;
+
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.65;
+
+      source.connect(gainNode);
+      gainNode.connect(analyser);
+
       if (micGain > 1.01) {
-        const AudioContextClass =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new AudioContextClass();
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
-        const source = ctx.createMediaStreamSource(stream);
-        const gainNode = ctx.createGain();
-        gainNode.gain.value = micGain;
         const limiter = ctx.createDynamicsCompressor();
         limiter.threshold.value = -3;
         limiter.knee.value = 6;
@@ -92,13 +112,30 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
         limiter.release.value = 0.1;
         const destination = ctx.createMediaStreamDestination();
 
-        source.connect(gainNode);
         gainNode.connect(limiter);
         limiter.connect(destination);
-
-        audioContextRef.current = ctx;
         recordStream = destination.stream;
       }
+
+      audioContextRef.current = ctx;
+
+      const timeData = new Uint8Array(analyser.fftSize);
+      levelTimerRef.current = setInterval(() => {
+        if (mutedRef.current) {
+          setAudioLevel(0);
+          return;
+        }
+        analyser.getByteTimeDomainData(timeData);
+        let sumSquares = 0;
+        for (let i = 0; i < timeData.length; i++) {
+          const normalized = (timeData[i] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / timeData.length);
+        // Scale typical speech RMS (~0.02–0.25) to 0–100
+        const scaled = Math.min(100, Math.round(Math.pow(rms * 4.2, 0.75) * 100));
+        setAudioLevel(scaled);
+      }, 85);
 
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(recordStream, mimeType ? { mimeType } : undefined);
@@ -153,5 +190,5 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
   // Release the microphone if the page is closed in the middle of an answer.
   useEffect(() => cancel, [cancel]);
 
-  return { isRecording, start, stop, cancel, setMuted };
+  return { isRecording, audioLevel, start, stop, cancel, setMuted };
 }

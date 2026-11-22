@@ -44,6 +44,7 @@ let faceLandmarkerInstance: FaceLandmarker | null = null;
 let faceLandmarkerPromise: Promise<FaceLandmarker> | null = null;
 let poseLandmarkerInstance: PoseLandmarker | null = null;
 let poseLandmarkerPromise: Promise<PoseLandmarker> | null = null;
+let modelAssetsPrefetched = false;
 
 const WASM_CDN_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
@@ -53,6 +54,36 @@ function getVisionFileset() {
     visionFilesetPromise = FilesetResolver.forVisionTasks(WASM_CDN_URL);
   }
   return visionFilesetPromise;
+}
+
+/**
+ * Yields back to the browser event & paint loop for at least one animation frame
+ * so UI transitions and video frames never freeze before heavy WebGL compilation.
+ */
+export function yieldToMainThread(frames = 1): Promise<void> {
+  if (typeof window === "undefined") {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let remaining = Math.max(1, frames);
+    const step = () => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        window.setTimeout(resolve, 0);
+      } else {
+        window.requestAnimationFrame(step);
+      }
+    };
+    window.requestAnimationFrame(step);
+  });
+}
+
+/**
+ * Returns true when both FaceLandmarker and PoseLandmarker singletons are already
+ * compiled in memory (e.g., when navigating back to the Practice Room).
+ */
+export function areVisionModelsLoaded(): boolean {
+  return Boolean(faceLandmarkerInstance && poseLandmarkerInstance);
 }
 
 // ─── Default Configurations ──────────────────────────────────────────────────
@@ -149,6 +180,26 @@ async function withMediaPipeStderrFilter<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * Pre-warms the MediaPipe WASM fileset and prefetches the `.task` model binaries
+ * into the browser HTTP cache during idle time (without running main-thread WebGL
+ * shader compilation). Safe to call on Home idle or Sidebar hover.
+ */
+export async function prewarmVisionFileset(): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await getVisionFileset();
+    if (!modelAssetsPrefetched && typeof fetch === "function") {
+      modelAssetsPrefetched = true;
+      // Low-priority background cache warm-up for model binaries
+      void fetch(FACE_MODEL_URL, { mode: "cors", credentials: "omit" }).catch(() => {});
+      void fetch(POSE_MODEL_URL, { mode: "cors", credentials: "omit" }).catch(() => {});
+    }
+  } catch {
+    // Ignore background prewarm failures; full init handles retries/errors.
+  }
+}
+
+/**
  * Initialises and returns the FaceLandmarker singleton.
  * Falls back to CPU automatically if WebGL GPU delegate is unavailable.
  */
@@ -162,6 +213,7 @@ export async function initFaceLandmarker(): Promise<FaceLandmarker> {
 
   faceLandmarkerPromise = (async () => {
     const vision = await getVisionFileset();
+    await yieldToMainThread(1);
     faceLandmarkerInstance = await withMediaPipeStderrFilter(async () => {
       try {
         return await FaceLandmarker.createFromOptions(
@@ -201,6 +253,7 @@ export async function initPoseLandmarker(): Promise<PoseLandmarker> {
 
   poseLandmarkerPromise = (async () => {
     const vision = await getVisionFileset();
+    await yieldToMainThread(1);
     poseLandmarkerInstance = await withMediaPipeStderrFilter(async () => {
       try {
         return await PoseLandmarker.createFromOptions(
