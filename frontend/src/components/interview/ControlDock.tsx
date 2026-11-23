@@ -1,5 +1,7 @@
 "use client";
 
+import { motion } from "framer-motion";
+
 interface ControlDockProps {
   isMicOn: boolean;
   isVideoOn: boolean;
@@ -34,25 +36,28 @@ function IconToggle({
   onClick: () => void;
 }) {
   return (
-    <button
+    <motion.button
       type="button"
+      whileTap={disabled ? undefined : { scale: 0.97 }}
       disabled={disabled}
       onClick={onClick}
       aria-pressed={on}
       aria-label={label}
       title={label}
-      className={`w-[36px] h-[36px] rounded-[6px] border flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+      className={`w-10 h-10 rounded-[var(--radius-control)] border flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
         on
-          ? "bg-white text-[#131416] border-[#cdced1] hover:bg-[#f4f6f8]"
-          : "bg-[#ffedea] text-[#831c1e] border-[#f5c2c7]"
+          ? "bg-[var(--surface)] text-[var(--text)] border-[var(--control)] hover:bg-[var(--raised)]"
+          : "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)] border-[var(--pill-negative-border)]"
       }`}
     >
-      <span className="material-symbols-outlined text-[18px]">{on ? iconOn : iconOff}</span>
-    </button>
+      <span className="material-symbols-outlined text-[18px]">
+        {on ? iconOn : iconOff}
+      </span>
+    </motion.button>
   );
 }
 
-/** Bottom controls: devices on the left, record action in the middle, next/finish on the right. */
+/** Floating bottom dock: devices on left, record action in center, next/finish on right. */
 export default function ControlDock({
   isMicOn,
   isVideoOn,
@@ -73,7 +78,11 @@ export default function ControlDock({
   const barThresholds = [10, 28, 48, 70];
 
   return (
-    <div className="sticky bottom-4 z-30 mt-5 rounded-[8px] border border-[#e8eaec] bg-white/95 backdrop-blur-sm px-3 py-2.5 flex flex-wrap items-center justify-between gap-3">
+    <div
+      className={`sticky bottom-4 z-30 mt-5 control-dock px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 ${
+        isSessionActive ? "control-dock-recording" : ""
+      }`}
+    >
       <div className="flex items-center gap-2">
         <IconToggle
           on={isMicOn}
@@ -91,16 +100,17 @@ export default function ControlDock({
           disabled={disabled}
           onClick={onToggleVideo}
         />
-        <button
+        <motion.button
           type="button"
+          whileTap={disabled ? undefined : { scale: 0.97 }}
           disabled={disabled}
           onClick={onOpenSettings}
           aria-label="Device settings"
           title="Device settings"
-          className="w-[36px] h-[36px] rounded-[6px] border border-[#cdced1] bg-white text-[#5d5f60] hover:bg-[#f4f6f8] flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-10 h-10 rounded-[var(--radius-control)] border border-[var(--control)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--raised)] flex items-center justify-center transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="material-symbols-outlined text-[18px]">settings</span>
-        </button>
+        </motion.button>
 
         {/* Live Mic Confidence Pill while recording */}
         {isSessionActive && (
@@ -111,15 +121,15 @@ export default function ControlDock({
                 ? "Live microphone input level"
                 : "Microphone is muted — click Mic or press M to unmute"
             }
-            className={`hidden sm:flex h-[32px] px-2.5 rounded-[6px] border items-center gap-2 text-[11.5px] font-medium transition-colors ${
+            className={`hidden sm:flex h-9 px-3 rounded-[var(--radius-control)] border items-center gap-2 text-[12px] font-medium transition-colors ${
               !isMicOn
-                ? "bg-[#ffedea] border-[#f5c2c7] text-[#831c1e]"
-                : "bg-[#f9fbfc] border-[#e8eaec] text-[#131416]"
+                ? "bg-[var(--pill-negative-bg)] border-[var(--pill-negative-border)] text-[var(--pill-negative-ink)]"
+                : "bg-[var(--raised)] border-[var(--border)] text-[var(--text)]"
             }`}
           >
             {!isMicOn ? (
               <>
-                <span className="w-1.5 h-1.5 rounded-full bg-[#c4242a]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--negative)]" />
                 <span>Mic muted</span>
               </>
             ) : (
@@ -131,8 +141,8 @@ export default function ControlDock({
                     return (
                       <span
                         key={threshold}
-                        className={`w-[3px] rounded-full transition-all duration-75 ${
-                          active ? "bg-[#1e7b4f]" : "bg-[#cdced1]"
+                        className={`w-[3px] rounded-full transition-colors duration-75 ${
+                          active ? "bg-[var(--positive)]" : "bg-[var(--control)]"
                         }`}
                         style={{
                           height: `${active ? Math.min(14, heightPx + 2) : heightPx}px`,
@@ -141,7 +151,7 @@ export default function ControlDock({
                     );
                   })}
                 </div>
-                <span className="text-[#45474a]">
+                <span className="text-[var(--text-secondary)]">
                   {audioLevel >= 12 ? "Voice detected" : "Listening…"}
                 </span>
               </>
@@ -150,21 +160,27 @@ export default function ControlDock({
         )}
       </div>
 
-      <button
+      {/* Primary Record / Stop Action */}
+      <motion.button
         type="button"
+        whileTap={disabled ? undefined : { scale: 0.98 }}
         disabled={disabled}
         onClick={onToggleSession}
         title="Shortcut: Spacebar"
-        className={`h-[36px] px-4 rounded-[6px] text-[13px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+        className={`relative h-10 px-4 rounded-[var(--radius-control)] text-[13px] font-medium flex items-center gap-2 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
           isSessionActive
-            ? "bg-[#ffedea] text-[#831c1e] hover:bg-[#fbd7d1]"
+            ? "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)] border border-[var(--pill-negative-border)]"
             : hasRecordedCurrent
-              ? "border border-[#b8d4dc] bg-[#eef4f6] text-[#134e5e] hover:bg-[#dfecef]"
-              : "bg-[#1b6c80] text-white hover:bg-[#134e5e]"
+              ? "border border-[var(--border-accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]"
+              : "btn-primary"
         }`}
       >
         <span className="material-symbols-outlined text-[18px]">
-          {isSessionActive ? "stop" : hasRecordedCurrent ? "replay" : "play_arrow"}
+          {isSessionActive
+            ? "stop"
+            : hasRecordedCurrent
+              ? "replay"
+              : "play_arrow"}
         </span>
         <span>
           {isSessionActive
@@ -177,47 +193,51 @@ export default function ControlDock({
           aria-hidden="true"
           className={`hidden md:inline-block ml-1 px-1.5 py-0.5 rounded-[4px] text-[10px] font-mono leading-none ${
             isSessionActive
-              ? "bg-[#fbd7d1] text-[#831c1e]"
+              ? "bg-[var(--negative)]/15 text-[var(--pill-negative-ink)]"
               : hasRecordedCurrent
-                ? "bg-[#dfecef] text-[#134e5e]"
-                : "bg-white/20 text-white"
+                ? "bg-[var(--accent)]/15 text-[var(--accent-ink)]"
+                : "bg-black/15 text-[var(--accent-fg)]"
           }`}
         >
           Space
         </kbd>
-      </button>
+      </motion.button>
 
       {isLastQuestion ? (
-        <button
+        <motion.button
           type="button"
+          whileTap={disabled ? undefined : { scale: 0.98 }}
           disabled={disabled}
           onClick={() => onFinishSession?.()}
-          className={`h-[36px] px-3.5 rounded-[6px] text-[13px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-            canHighlightFinish
-              ? "bg-[#1b6c80] text-white hover:bg-[#134e5e]"
-              : "border border-[#cdced1] bg-white text-[#131416] hover:bg-[#f4f6f8]"
+          className={`h-10 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+            canHighlightFinish ? "btn-primary" : "btn-secondary"
           }`}
         >
-          <span className="material-symbols-outlined text-[17px]">auto_awesome</span>
-          Finish &amp; analyze
-        </button>
+          <span>Finish &amp; analyze</span>
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_forward
+          </span>
+        </motion.button>
       ) : (
-        <button
+        <motion.button
           type="button"
+          whileTap={disabled ? undefined : { scale: 0.98 }}
           disabled={disabled}
           onClick={() => onNextQuestion?.()}
           title="Shortcut: Alt + Right Arrow"
-          className="h-[36px] px-3 rounded-[6px] border border-[#cdced1] bg-white text-[#131416] hover:bg-[#f4f6f8] text-[13px] font-medium flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-secondary h-10 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span>Next</span>
-          <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_forward
+          </span>
           <kbd
             aria-hidden="true"
-            className="hidden md:inline-block ml-0.5 px-1.5 py-0.5 rounded-[4px] bg-[#f4f6f8] border border-[#e8eaec] text-[10px] font-mono text-[#5d5f60] leading-none"
+            className="hidden md:inline-block ml-0.5 px-1.5 py-0.5 rounded-[4px] bg-[var(--raised)] border border-[var(--border)] text-[10px] font-mono text-[var(--muted)] leading-none"
           >
             Alt+→
           </kbd>
-        </button>
+        </motion.button>
       )}
     </div>
   );

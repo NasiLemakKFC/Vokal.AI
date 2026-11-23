@@ -54,7 +54,6 @@ export interface SessionMetrics {
   avgPosture: number | null;
 }
 
-export const STORAGE_KEY = "vokal-module3-completed-sessions-v1";
 export const SESSIONS_UPDATED_EVENT = "vokal-sessions-updated";
 export const EMPTY_SESSIONS: SavedSession[] = [];
 
@@ -63,69 +62,55 @@ const METRIC_RESULT_REGEX =
 
 const STAR_KEYS: StarKey[] = ["situation", "task", "action", "result"];
 
-function parseSessions(raw: string | null): SavedSession[] {
-  if (!raw) return EMPTY_SESSIONS;
-  try {
-    const value: unknown = JSON.parse(raw);
-    return Array.isArray(value)
-      ? value.filter(
-          (s): s is SavedSession =>
-            Boolean(s && typeof s === "object" && "answers" in s && Array.isArray(s.answers))
-        )
-      : EMPTY_SESSIONS;
-  } catch {
-    return EMPTY_SESSIONS;
-  }
-}
-
-let cachedRaw: string | null = null;
-let cachedSessions: SavedSession[] = EMPTY_SESSIONS;
-
-/**
- * Snapshot reader compatible with React's `useSyncExternalStore`.
- * Returns a referentially stable array unless the underlying localStorage value changed.
- */
-export function getSessionsSnapshot(): SavedSession[] {
-  if (typeof window === "undefined") return EMPTY_SESSIONS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === cachedRaw) return cachedSessions;
-    cachedRaw = raw;
-    cachedSessions = parseSessions(raw);
-    return cachedSessions;
-  } catch {
-    return EMPTY_SESSIONS;
-  }
-}
-
-export function subscribeSessions(listener: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === null || e.key === STORAGE_KEY) listener();
-  };
-  const onUpdated = () => listener();
-  window.addEventListener("storage", onStorage);
-  window.addEventListener(SESSIONS_UPDATED_EVENT, onUpdated);
-  return () => {
-    window.removeEventListener("storage", onStorage);
-    window.removeEventListener(SESSIONS_UPDATED_EVENT, onUpdated);
-  };
-}
-
-export function getSessions(): SavedSession[] {
-  if (typeof window === "undefined") return EMPTY_SESSIONS;
-  return parseSessions(localStorage.getItem(STORAGE_KEY));
-}
-
-export function saveSession(session: SavedSession): void {
-  const sessions = getSessions();
-  const serialized = JSON.stringify([session, ...sessions].slice(0, 30));
-  localStorage.setItem(STORAGE_KEY, serialized);
-  cachedRaw = serialized;
-  cachedSessions = parseSessions(serialized);
+function notifySessionsUpdated(): void {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(SESSIONS_UPDATED_EVENT));
   }
+}
+
+export async function fetchSessions(): Promise<SavedSession[]> {
+  const res = await fetch("/api/sessions", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+  if (res.status === 401) {
+    return EMPTY_SESSIONS;
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to load sessions (${res.status}).`);
+  }
+  const data = (await res.json()) as { sessions?: SavedSession[] };
+  return Array.isArray(data.sessions) ? data.sessions : EMPTY_SESSIONS;
+}
+
+export async function createSession(session: SavedSession): Promise<SavedSession> {
+  const res = await fetch("/api/sessions", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(session),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to save session (${res.status}).`);
+  }
+  const data = (await res.json()) as { session: SavedSession };
+  notifySessionsUpdated();
+  return data.session;
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to delete session (${res.status}).`);
+  }
+  notifySessionsUpdated();
 }
 
 export function starCount(a: AnswerAnalysis): number {

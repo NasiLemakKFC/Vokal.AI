@@ -1,4 +1,16 @@
 export type StarKey = "situation" | "task" | "action" | "result";
+
+export const STAR_LABELS: readonly (readonly [StarKey, string])[] = [
+  ["situation", "Situation"],
+  ["task", "Task"],
+  ["action", "Action"],
+  ["result", "Result"],
+] as const;
+
+export interface StarPillar {
+  score: number;
+  note: string;
+}
 export type KeywordCategory = "question" | "job-role" | "job-description" | "professional";
 export interface KeywordGroup {
   category: KeywordCategory;

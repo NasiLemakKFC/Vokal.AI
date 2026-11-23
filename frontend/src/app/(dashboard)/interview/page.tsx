@@ -15,7 +15,7 @@ import {
 import { analyzeAnswer } from "@/lib/nlp/analyze";
 import {
   computeSessionMetrics,
-  saveSession,
+  createSession,
   type SavedAnswer,
   type SavedSession,
   type VisionSnapshot,
@@ -99,6 +99,7 @@ interface ExecuteAnalysisQueueParams {
   setCompletedSession: (session: SavedSession | null) => void;
   setIsCompleting: (val: boolean) => void;
   setModalPhase: (phase: AnalysisModalPhase) => void;
+  setSaveError: (msg: string | null) => void;
 }
 
 async function executeAnalysisQueue({
@@ -116,6 +117,7 @@ async function executeAnalysisQueue({
   setCompletedSession,
   setIsCompleting,
   setModalPhase,
+  setSaveError,
 }: ExecuteAnalysisQueueParams): Promise<void> {
   const runId = ++analysisRunIdRef.current;
   let workingQueue = initialQueue.map((it) => ({ ...it }));
@@ -266,8 +268,17 @@ async function executeAnalysisQueue({
     presenceScore: sessionMetrics.presenceScore,
   };
 
-  saveSession(newSession);
-  setCompletedSession(newSession);
+  let persistedSession = newSession;
+  try {
+    persistedSession = await createSession(newSession);
+  } catch (err) {
+    setSaveError(
+      err instanceof Error
+        ? `Analysis finished, but saving to MongoDB failed: ${err.message}`
+        : "Analysis finished, but saving to MongoDB failed."
+    );
+  }
+  setCompletedSession(persistedSession);
   setIsCompleting(true);
   if (!(await waitWithRun(600))) return;
 
@@ -396,6 +407,14 @@ export default function PracticeRoom() {
   useEffect(() => {
     setRecorderMuted(!isMicOn);
   }, [isMicOn, setRecorderMuted]);
+
+  // Toggle Warm Editorial "On-Air" ambient focus dimming while actively recording
+  useEffect(() => {
+    document.documentElement.dataset.onAir = isSessionActive ? "true" : "false";
+    return () => {
+      delete document.documentElement.dataset.onAir;
+    };
+  }, [isSessionActive]);
 
   useEffect(() => {
     return () => {
@@ -622,6 +641,7 @@ export default function PracticeRoom() {
       setCompletedSession,
       setIsCompleting,
       setModalPhase,
+      setSaveError: setSpeechError,
     });
 
   const handleFinishSession = async () => {
@@ -853,7 +873,7 @@ export default function PracticeRoom() {
           : "wrap_up";
 
   return (
-    <div className="max-w-[1180px] mx-auto pb-10">
+    <div className="max-w-[1200px] mx-auto pb-10">
       <SessionSetupCard
         target={target}
         onTargetChange={setTarget}
@@ -883,8 +903,8 @@ export default function PracticeRoom() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
-        <div className="flex flex-wrap items-center gap-2 text-[13px] text-[#5d5f60] min-w-0">
-          <div className="flex items-center gap-1" role="tablist" aria-label="Questions">
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--muted)] min-w-0">
+          <div className="flex items-center gap-1.5" role="tablist" aria-label="Questions">
             {questions.map((_, idx) => {
               const isActive = idx === questionIndex;
               const isReady = isDraftReady(drafts[idx]);
@@ -896,17 +916,17 @@ export default function PracticeRoom() {
                   aria-selected={isActive}
                   disabled={isModalOpen}
                   onClick={() => void handleSelectQuestion(idx)}
-                  className={`h-[28px] px-2.5 rounded-[6px] border text-[12px] font-medium tabular-nums flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50 ${
+                  className={`h-8 px-3 rounded-[var(--radius-control)] border text-[12px] font-medium tabular-nums flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 ${
                     isActive
-                      ? "bg-[#eef4f6] text-[#134e5e] border-[#b8d4dc]"
+                      ? "bg-[var(--accent-soft)] text-[var(--accent-ink)] border-[var(--border-accent)]"
                       : isReady
-                        ? "bg-white text-[#131416] border-[#b5e8c5] hover:bg-[#f7fcf9]"
-                        : "bg-white text-[#5d5f60] border-[#e8eaec] hover:bg-[#f4f6f8]"
+                        ? "bg-[var(--surface)] text-[var(--text)] border-[var(--pill-positive-border)] hover:bg-[var(--raised)]"
+                        : "bg-[var(--surface)] text-[var(--muted)] border-[var(--border)] hover:bg-[var(--raised)] hover:text-[var(--text)]"
                   }`}
                 >
                   Q{idx + 1}
                   {isReady && (
-                    <span className="material-symbols-outlined text-[14px] text-[#1e7b4f]">
+                    <span className="material-symbols-outlined text-[15px] text-[var(--positive)]">
                       check_circle
                     </span>
                   )}
@@ -914,8 +934,8 @@ export default function PracticeRoom() {
               );
             })}
           </div>
-          <span className="text-[#cdced1]">·</span>
-          <span className="truncate">
+          <span className="text-[var(--control)]">·</span>
+          <span className="truncate font-medium text-[var(--text-secondary)]">
             {target.mode === "general"
               ? "General Interview"
               : target.company.trim()
@@ -927,28 +947,28 @@ export default function PracticeRoom() {
         <div className="flex items-center gap-2">
           <span
             title="Target STAR answer length: 1:30 to 2:30"
-            className={`h-[30px] px-2.5 rounded-[6px] border flex items-center gap-1.5 text-[13px] font-medium tabular-nums transition-colors ${
+            className={`h-8 px-3 rounded-[var(--radius-control)] border flex items-center gap-2 text-[13px] font-medium tabular-nums transition-colors ${
               timerPacingState === "optimal"
-                ? "bg-[#dcfae5] text-[#04250e] border-[#b5e8c5]"
+                ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)] border-[var(--pill-positive-border)]"
                 : timerPacingState === "wrap_up"
-                  ? "bg-[#fffbeb] text-[#92400e] border-[#fde68a]"
-                  : "bg-white text-[#131416] border-[#e8eaec]"
+                  ? "bg-[var(--pill-warning-bg)] text-[var(--pill-warning-ink)] border-[var(--pill-warning-border)]"
+                  : "bg-[var(--surface)] text-[var(--text)] border-[var(--border)]"
             }`}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 rounded-full shrink-0 ${
                 isSessionActive
                   ? timerPacingState === "optimal"
-                    ? "bg-[#1e7b4f] animate-pulse"
+                    ? "bg-[var(--positive)]"
                     : timerPacingState === "wrap_up"
-                      ? "bg-[#a86f0c] animate-pulse"
-                      : "bg-[#c4242a] animate-pulse"
-                  : "bg-[#cdced1]"
+                      ? "bg-[var(--warning-ink)]"
+                      : "bg-[var(--negative)]"
+                  : "bg-[var(--control)]"
               }`}
             />
-            <span>{formatDuration(elapsedSeconds)}</span>
+            <span className="font-mono">{formatDuration(elapsedSeconds)}</span>
             {isSessionActive && (
-              <span className="hidden sm:inline text-[11px] font-normal opacity-80">
+              <span className="hidden sm:inline text-[12px] font-normal opacity-80">
                 {timerPacingState === "optimal"
                   ? "· Optimal 1:30–2:30"
                   : timerPacingState === "wrap_up"
@@ -961,22 +981,20 @@ export default function PracticeRoom() {
             type="button"
             disabled={isModalOpen}
             onClick={() => void handleFinishSession()}
-            className={`h-[30px] px-3 rounded-[6px] text-[13px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 ${
-              canFinish
-                ? "bg-[#1b6c80] text-white hover:bg-[#134e5e]"
-                : "text-[#131416] border border-[#cdced1] bg-white hover:bg-[#f4f6f8]"
+            className={`h-8 px-3 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+              canFinish ? "btn-primary" : "btn-secondary"
             }`}
           >
-            <span className="material-symbols-outlined text-[15px]">auto_awesome</span>
-            Finish &amp; analyze
+            <span>Finish &amp; analyze</span>
             {readyAnswerCount > 0 && (
-              <span className="tabular-nums">({readyAnswerCount})</span>
+              <span className="font-mono tabular-nums">({readyAnswerCount})</span>
             )}
+            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: question, STAR, tip */}
         <section className="lg:col-span-5 flex flex-col gap-3">
           <QuestionPrompt
@@ -990,7 +1008,7 @@ export default function PracticeRoom() {
           <LiveCoachingTip tip={liveTip} />
         </section>
 
-        {/* Right: video + speech chips */}
+        {/* Right: video + instrument telemetry strip */}
         <section className="lg:col-span-7 flex flex-col gap-3">
           <CandidateVideoFeed
             ref={webcamRef}
@@ -1016,37 +1034,40 @@ export default function PracticeRoom() {
             trackInPreview={trackInPreview}
             onToggleTrackInPreview={() => setTrackInPreview((v) => !v)}
           />
-          <div className="flex items-center gap-2 text-[13px] flex-wrap">
-            <span className="badge !text-[12px] !py-1">
-              Posture{" "}
-              <span className="font-semibold tabular-nums">
-                {vision ? `${Math.round(vision.livePostureScore)}%` : "—"}
-              </span>
-            </span>
-            <span className="badge !text-[12px] !py-1">
-              Pace{" "}
-              <span className="font-semibold tabular-nums">
-                {speech ? `${metrics.wpm} WPM` : "—"}
-              </span>
-            </span>
-            <span className="badge !text-[12px] !py-1">
-              Fillers{" "}
-              <span className="font-semibold tabular-nums">
-                {speech ? metrics.fillerCount : "—"}
-              </span>
-            </span>
-            <span className="badge !text-[12px] !py-1">
-              Long pauses{" "}
-              <span className="font-semibold tabular-nums">
-                {speech ? speech.ui.longPauses : "—"}
-              </span>
-            </span>
-            <span className="badge !text-[12px] !py-1">
-              Fluency{" "}
-              <span className="font-semibold tabular-nums">
-                {speech ? `${speech.ui.fluencyScore}%` : "—"}
-              </span>
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface)] divide-x divide-[var(--rule)]">
+              <div className="px-3 py-1.5 flex items-center gap-2">
+                <span className="text-[12px] text-[var(--muted)]">Posture</span>
+                <span className="text-[13px] font-mono font-medium tabular-nums text-[var(--text)]">
+                  {vision ? `${Math.round(vision.livePostureScore)}%` : "—"}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 flex items-center gap-2">
+                <span className="text-[12px] text-[var(--muted)]">Pace</span>
+                <span className="text-[13px] font-mono font-medium tabular-nums text-[var(--text)]">
+                  {speech ? `${metrics.wpm} WPM` : "—"}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 flex items-center gap-2">
+                <span className="text-[12px] text-[var(--muted)]">Fillers</span>
+                <span className="text-[13px] font-mono font-medium tabular-nums text-[var(--text)]">
+                  {speech ? metrics.fillerCount : "—"}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 flex items-center gap-2">
+                <span className="text-[12px] text-[var(--muted)]">Long pauses</span>
+                <span className="text-[13px] font-mono font-medium tabular-nums text-[var(--text)]">
+                  {speech ? speech.ui.longPauses : "—"}
+                </span>
+              </div>
+              <div className="px-3 py-1.5 flex items-center gap-2">
+                <span className="text-[12px] text-[var(--muted)]">Fluency</span>
+                <span className="text-[13px] font-mono font-medium tabular-nums text-[var(--text)]">
+                  {speech ? `${speech.ui.fluencyScore}%` : "—"}
+                </span>
+              </div>
+            </div>
+
             <div className="relative group">
               <button
                 type="button"
@@ -1057,65 +1078,67 @@ export default function PracticeRoom() {
                 aria-label={`Speech recognition mode: ${
                   speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"
                 }. Click to switch mode.`}
-                className="h-[26px] px-2.5 rounded-[4px] border border-[#cdced1] bg-white hover:bg-[#f4f6f8] text-[#131416] text-[11.5px] font-medium flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                className="h-8 px-3 rounded-[var(--radius-control)] border border-[var(--control)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--text)] text-[12px] font-medium flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[14px] text-[#1b6c80]">
+                <span className="material-symbols-outlined text-[16px] text-[var(--muted)]">
                   translate
                 </span>
-                {speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"}
-                <span className="material-symbols-outlined text-[13px] opacity-60">
+                <span>{speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"}</span>
+                <span className="material-symbols-outlined text-[15px] text-[var(--muted)]">
                   info
                 </span>
               </button>
               <div
                 role="tooltip"
-                className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full left-0 lg:left-auto lg:right-0 mb-2 w-[255px] rounded-[6px] bg-[#131416]/95 border border-white/15 p-2.5 text-left shadow-xl z-40"
+                className="pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 absolute bottom-full left-0 lg:left-auto lg:right-0 mb-2 w-64 rounded-[var(--radius-control)] bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] p-3 text-left z-40"
+                style={{ boxShadow: "var(--shadow-popover)" }}
               >
-                <p className="text-[11.5px] font-semibold text-white">
-                  Speech Recognition:{" "}
+                <p className="text-[12px] font-medium text-[var(--text)]">
+                  Speech recognition:{" "}
                   {speechLang === "en" ? "English (MY)" : "Mixed (BM+EN)"}
                 </p>
-                <p className="text-[11px] text-white/80 mt-1 leading-snug">
-                  <strong className="text-white">English (MY)</strong>{" "}
-                  (recommended): Best for English interviews with a Malaysian
-                  accent or Manglish fillers (lah, kan, um) — keeps STAR &amp;
-                  keyword scoring accurate.
+                <p className="text-[12px] text-[var(--text-secondary)] mt-1 leading-snug">
+                  <strong className="font-medium text-[var(--text)]">English (MY)</strong>{" "}
+                  (recommended) handles Malaysian English accents and fillers like lah and um
                 </p>
-                <p className="text-[11px] text-white/80 mt-1 leading-snug">
-                  <strong className="text-white">Mixed (BM+EN)</strong>: Best if
-                  you mix Malay and English sentences — STAR structure and
-                  common BM skill phrases are also supported.
+                <p className="text-[12px] text-[var(--text-secondary)] mt-1 leading-snug">
+                  <strong className="font-medium text-[var(--text)]">Mixed (BM+EN)</strong>{" "}
+                  supports code-switching between Malay and English
                 </p>
-                <p className="text-[10.5px] text-[#4edea3] mt-1.5 font-medium">
+                <p className="text-[11px] text-[var(--muted)] mt-1.5">
                   Click to switch mode
                 </p>
               </div>
             </div>
-
-            {hasCurrentRecording && !speech && !isSessionActive && (
-              <span className="pill-positive gap-1">
-                <span className="material-symbols-outlined text-[13px]">
-                  check_circle
-                </span>
-                Recorded · {formatDuration(currentDraft.durationSec)} · Ready for
-                analysis
-              </span>
-            )}
-
-            {speech && speech.ui.fillers.length > 0 && (
-              <span className="text-[11.5px] text-[#5d5f60]">
-                Detected:{" "}
-                <span className="font-medium text-[#131416]">
-                  {speech.ui.fillers.join(", ")}
-                </span>
-              </span>
-            )}
-            {speechError && (
-              <span role="alert" className="text-[12px] text-[#c4242a]">
-                {speechError}
-              </span>
-            )}
           </div>
+
+          {(hasCurrentRecording && !speech && !isSessionActive) ||
+          (speech && speech.ui.fillers.length > 0) ||
+          speechError ? (
+            <div className="flex flex-wrap items-center gap-3 text-[12px]">
+              {hasCurrentRecording && !speech && !isSessionActive && (
+                <span className="pill-positive gap-1.5">
+                  <span className="material-symbols-outlined text-[14px]">
+                    check_circle
+                  </span>
+                  Recorded · {formatDuration(currentDraft.durationSec)} · Ready for analysis
+                </span>
+              )}
+              {speech && speech.ui.fillers.length > 0 && (
+                <span className="text-[var(--muted)]">
+                  Detected:{" "}
+                  <span className="font-medium text-[var(--text)]">
+                    {speech.ui.fillers.join(", ")}
+                  </span>
+                </span>
+              )}
+              {speechError && (
+                <span role="alert" className="text-[var(--negative)]">
+                  {speechError}
+                </span>
+              )}
+            </div>
+          ) : null}
         </section>
       </div>
 

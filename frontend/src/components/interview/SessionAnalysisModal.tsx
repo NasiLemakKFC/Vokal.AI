@@ -44,6 +44,8 @@ export interface SessionAnalysisModalProps {
   onViewFullReport: (sessionId: string) => void;
 }
 
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
 const STAR_META: { key: StarKey; letter: string; label: string }[] = [
   { key: "situation", letter: "S", label: "Situation" },
   { key: "task", letter: "T", label: "Task" },
@@ -68,10 +70,10 @@ const SUB_STAGE_PROGRESS: Record<AnalysisSubStage, number> = {
 
 function scoreTone(score: number): string {
   return score >= 80
-    ? "text-[#1e7b4f]"
+    ? "text-[var(--positive)]"
     : score >= 70
-      ? "text-[#92400e]"
-      : "text-[#c4242a]";
+      ? "text-[var(--warning-ink)]"
+      : "text-[var(--negative)]";
 }
 
 function formatDuration(sec: number): string {
@@ -95,25 +97,25 @@ function getSubStageSteps(hasAudio: boolean): {
   return [
     {
       key: "speech_transcribe",
-      moduleLabel: "Module 2 · Speech-to-Text",
+      moduleLabel: "Speech transcription",
       description: hasAudio
-        ? "Transcribing audio with Whisper…"
+        ? "Transcribing recorded audio…"
         : "Reading typed transcript…",
     },
     {
       key: "speech_fluency",
-      moduleLabel: "Module 5 · Speech Fluency",
-      description: "Measuring pace, filler words & pauses…",
+      moduleLabel: "Speech pacing & fillers",
+      description: "Measuring pace, filler words, and pauses…",
     },
     {
       key: "nlp_star",
-      moduleLabel: "Module 3 · STAR & Keywords",
-      description: "Classifying S / T / A / R & role keywords…",
+      moduleLabel: "STAR structure & keywords",
+      description: "Classifying S, T, A, R and role keywords…",
     },
     {
       key: "vision_merge",
-      moduleLabel: "Module 4 · Visual Presence",
-      description: "Merging eye contact & posture summary…",
+      moduleLabel: "Eye contact & posture",
+      description: "Merging presence summary…",
     },
   ];
 }
@@ -147,27 +149,25 @@ function AnalyzingView({
   return (
     <motion.div
       key="analyzing-card"
-      initial={{ opacity: 0, scale: 0.97, y: 8 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, y: -8 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-      className="w-full max-w-[560px] rounded-[12px] bg-white border border-[#e8eaec] shadow-xl overflow-hidden"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2, ease: EASE_OUT }}
+      className="w-full max-w-[560px] rounded-[var(--radius-card)] bg-[var(--surface)] border border-[var(--border)] overflow-hidden"
+      style={{ boxShadow: "var(--shadow-popover)" }}
     >
       {/* Header */}
-      <div className="px-5 py-4 border-b border-[#e8eaec] flex items-start justify-between gap-3">
+      <div className="px-5 py-4 border-b border-[var(--border)] flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="relative w-9 h-9 rounded-[8px] bg-[#eef4f6] border border-[#b8d4dc] flex items-center justify-center shrink-0">
-            {!errorItem && !isCompleting && (
-              <span className="absolute inset-0 rounded-[8px] bg-[#1b6c80]/15 animate-ping" />
-            )}
-            <span className="material-symbols-outlined text-[20px] text-[#1b6c80] relative">
+          <div className="w-9 h-9 rounded-[var(--radius-control)] bg-[var(--raised)] border border-[var(--border)] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[18px] text-[var(--text)]">
               {errorItem ? "error_outline" : isCompleting ? "check_circle" : "graphic_eq"}
             </span>
           </div>
           <div className="min-w-0">
             <h2
               id="analysis-modal-title"
-              className="text-[16px] font-semibold text-[#131416] leading-snug"
+              className="text-[16px] font-medium text-[var(--text)] leading-snug"
             >
               {errorItem
                 ? "Analysis paused on an answer"
@@ -175,25 +175,32 @@ function AnalyzingView({
                   ? "Analysis complete"
                   : "Analyzing your answers"}
             </h2>
-            <p className="text-[12.5px] text-[#5d5f60] mt-0.5">
+            <p className="text-[12px] text-[var(--muted)] mt-0.5">
               {errorItem
-                ? "Choose how to continue below."
-                : "Please stay on this screen — answers are being evaluated one by one."}
+                ? "Choose how to continue below"
+                : "Stay on this screen while answers are evaluated one by one"}
             </p>
           </div>
         </div>
-        <span className="px-2.5 py-1 rounded-[6px] bg-[#f4f6f8] border border-[#e8eaec] text-[12px] font-medium text-[#131416] tabular-nums shrink-0">
+        <span className="px-2.5 py-1 rounded-[var(--radius-control)] bg-[var(--raised)] border border-[var(--border)] text-[12px] font-mono font-medium text-[var(--text)] tabular-nums shrink-0">
           {finishedCount} / {items.length}
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 w-full bg-[#f0f1f2] overflow-hidden">
+      <div className="h-1.5 w-full bg-[var(--ring-track)] overflow-hidden">
         <motion.div
-          className={`h-full ${errorItem ? "bg-[#c4242a]" : isCompleting ? "bg-[#1e7b4f]" : "bg-[#1b6c80]"}`}
+          className="h-full"
+          style={{
+            backgroundColor: errorItem
+              ? "var(--negative)"
+              : isCompleting
+                ? "var(--positive)"
+                : "var(--accent)",
+          }}
           initial={{ width: "0%" }}
           animate={{ width: `${progressPct}%` }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
         />
       </div>
 
@@ -206,12 +213,12 @@ function AnalyzingView({
           const isSkipped = item.status === "skipped";
 
           const containerStyle = isError
-            ? "border-[#f5c2c7] bg-[#fff5f5]"
+            ? "border-[var(--pill-negative-border)] bg-[var(--pill-negative-bg)]"
             : isAnalyzing
-              ? "border-[#1b6c80] bg-[#f4f9fb]"
+              ? "border-[var(--border-accent)] bg-[var(--accent-soft)]/50"
               : isDone
-                ? "border-[#b5e8c5] bg-[#f7fcf9]"
-                : "border-[#e8eaec] bg-[#f9fbfc]";
+                ? "border-[var(--pill-positive-border)] bg-[var(--pill-positive-bg)]/50"
+                : "border-[var(--border)] bg-[var(--raised)]/60";
 
           const steps = getSubStageSteps(item.hasAudio);
           const currentStepIdx =
@@ -224,32 +231,31 @@ function AnalyzingView({
           return (
             <motion.div
               key={item.questionIndex}
-              layout
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: idx * 0.04 }}
-              className={`rounded-[8px] border p-3.5 transition-colors ${containerStyle}`}
+              transition={{ duration: 0.2, delay: idx * 0.04, ease: EASE_OUT }}
+              className={`rounded-[var(--radius-control)] border p-3.5 transition-colors ${containerStyle}`}
             >
               <div className="flex items-start justify-between gap-2.5">
                 <div className="flex items-start gap-2.5 min-w-0">
                   <span
-                    className={`px-2 py-0.5 rounded-[5px] text-[11.5px] font-semibold tabular-nums shrink-0 ${
+                    className={`px-2 py-0.5 rounded-[4px] text-[12px] font-mono font-medium tabular-nums shrink-0 ${
                       isDone
-                        ? "bg-[#dcfae5] text-[#04250e]"
+                        ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
                         : isAnalyzing
-                          ? "bg-[#1b6c80] text-white"
+                          ? "bg-[var(--accent)] text-[var(--accent-fg)]"
                           : isError
-                            ? "bg-[#ffedea] text-[#831c1e]"
-                            : "bg-[#ebedee] text-[#353736]"
+                            ? "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]"
+                            : "bg-[var(--pill-neutral-bg)] text-[var(--pill-neutral-ink)]"
                     }`}
                   >
                     Q{item.questionIndex + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-[#131416] truncate">
+                    <p className="text-[13px] font-medium text-[var(--text)] truncate">
                       {item.question}
                     </p>
-                    <p className="text-[11.5px] text-[#5d5f60] mt-0.5 tabular-nums">
+                    <p className="text-[12px] text-[var(--muted)] mt-0.5 font-mono tabular-nums">
                       {item.hasAudio
                         ? `Audio · ${formatDuration(item.durationSec)}`
                         : "Text transcript"}
@@ -258,23 +264,21 @@ function AnalyzingView({
                 </div>
 
                 <span
-                  className={`shrink-0 inline-flex items-center gap-1 text-[11.5px] font-medium px-2 py-0.5 rounded-[4px] ${
+                  className={`shrink-0 inline-flex items-center gap-1 text-[12px] font-medium px-2 py-0.5 rounded-[var(--radius-pill)] ${
                     isDone
-                      ? "bg-[#dcfae5] text-[#04250e]"
+                      ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
                       : isAnalyzing
-                        ? "bg-[#e6f2f5] text-[#134e5e]"
+                        ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]"
                         : isError
-                          ? "bg-[#ffedea] text-[#831c1e]"
-                          : isSkipped
-                            ? "bg-[#ebedee] text-[#5d5f60]"
-                            : "bg-[#ebedee] text-[#5d5f60]"
+                          ? "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]"
+                          : "bg-[var(--pill-neutral-bg)] text-[var(--muted)]"
                   }`}
                 >
                   {isDone && (
                     <span className="material-symbols-outlined text-[14px]">check_circle</span>
                   )}
                   {isAnalyzing && (
-                    <span className="w-2 h-2 rounded-full bg-[#1b6c80] animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)]" />
                   )}
                   {isError && (
                     <span className="material-symbols-outlined text-[14px]">error</span>
@@ -291,12 +295,13 @@ function AnalyzingView({
                 </span>
               </div>
 
-              {/* Active 4-module sub-stage checklist */}
+              {/* Active 4-stage sub-stage checklist */}
               {isAnalyzing && (
                 <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="mt-3 pt-2.5 border-t border-[#d8e9ee] space-y-1.5"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, ease: EASE_OUT }}
+                  className="mt-3 pt-2.5 border-t border-[var(--border-accent)]/50 space-y-1.5"
                 >
                   {steps.map((step, sIdx) => {
                     const stepDone = sIdx < currentStepIdx;
@@ -304,30 +309,30 @@ function AnalyzingView({
                     return (
                       <div key={step.key} className="flex items-center gap-2 text-[12px]">
                         {stepDone ? (
-                          <span className="material-symbols-outlined text-[15px] text-[#1e7b4f] shrink-0">
+                          <span className="material-symbols-outlined text-[15px] text-[var(--positive)] shrink-0">
                             check_circle
                           </span>
                         ) : stepActive ? (
-                          <span className="w-3.5 h-3.5 rounded-full border-2 border-[#1b6c80] border-t-transparent animate-spin shrink-0" />
+                          <span className="w-3.5 h-3.5 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin shrink-0" />
                         ) : (
                           <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#cdced1]" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--control)]" />
                           </span>
                         )}
                         <span
                           className={`font-medium ${
                             stepDone
-                              ? "text-[#1e7b4f]"
+                              ? "text-[var(--positive)]"
                               : stepActive
-                                ? "text-[#131416]"
-                                : "text-[#8b8d90]"
+                                ? "text-[var(--text)]"
+                                : "text-[var(--subtle)]"
                           }`}
                         >
                           {step.moduleLabel}
                         </span>
                         <span
                           className={`truncate ${
-                            stepActive ? "text-[#134e5e]" : "text-[#8b8d90]"
+                            stepActive ? "text-[var(--accent-ink)]" : "text-[var(--subtle)]"
                           }`}
                         >
                           {stepActive ? step.description : stepDone ? "Complete" : "Queued"}
@@ -341,9 +346,9 @@ function AnalyzingView({
               {/* Done summary chips */}
               {isDone && item.result && answerMetrics && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.94 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 26 }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.18, ease: EASE_OUT }}
                   className="mt-2.5 flex flex-wrap items-center gap-1.5"
                 >
                   <span className="pill-positive">
@@ -353,12 +358,12 @@ function AnalyzingView({
                     Keywords {item.result.analysis.coverage}%
                   </span>
                   {item.result.speech && (
-                    <span className="badge tabular-nums">
+                    <span className="badge font-mono tabular-nums">
                       {item.result.speech.wpm} WPM
                     </span>
                   )}
                   {item.result.vision && (
-                    <span className="badge tabular-nums">
+                    <span className="badge font-mono tabular-nums">
                       Eye {Math.round(item.result.vision.eyeContactScore)}%
                     </span>
                   )}
@@ -367,7 +372,7 @@ function AnalyzingView({
 
               {/* Error message */}
               {isError && item.errorMessage && (
-                <p className="mt-2 text-[12px] text-[#831c1e] leading-snug">
+                <p className="mt-2 text-[12px] text-[var(--pill-negative-ink)] leading-snug">
                   {item.errorMessage}
                 </p>
               )}
@@ -379,12 +384,13 @@ function AnalyzingView({
         <AnimatePresence>
           {isCompleting && (
             <motion.div
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="rounded-[8px] bg-[#dcfae5] border border-[#b5e8c5] px-3.5 py-2.5 flex items-center gap-2 text-[13px] font-medium text-[#04250e]"
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+              className="rounded-[var(--radius-control)] bg-[var(--pill-positive-bg)] border border-[var(--pill-positive-border)] px-3.5 py-2.5 flex items-center gap-2 text-[13px] font-medium text-[var(--pill-positive-ink)]"
             >
-              <span className="material-symbols-outlined text-[18px] text-[#1e7b4f]">
+              <span className="material-symbols-outlined text-[18px] text-[var(--positive)]">
                 verified
               </span>
               All answers analyzed — opening your STAR review…
@@ -394,13 +400,13 @@ function AnalyzingView({
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3 bg-[#f9fbfc] border-t border-[#e8eaec] flex flex-wrap items-center justify-between gap-2">
+      <div className="px-5 py-3 bg-[var(--raised)]/60 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
         {errorItem ? (
           <>
             <button
               type="button"
               onClick={onCancelAnalysis}
-              className="h-[32px] px-3 rounded-[6px] border border-[#cdced1] bg-white text-[12px] font-medium text-[#131416] hover:bg-[#f4f6f8] cursor-pointer"
+              className="btn-secondary h-8 px-3 text-[12px] font-medium cursor-pointer"
             >
               Cancel &amp; return to practice
             </button>
@@ -409,7 +415,7 @@ function AnalyzingView({
                 <button
                   type="button"
                   onClick={() => onSkipItem(errorIndex)}
-                  className="h-[32px] px-3 rounded-[6px] border border-[#cdced1] bg-white text-[12px] font-medium text-[#131416] hover:bg-[#f4f6f8] cursor-pointer"
+                  className="btn-secondary h-8 px-3 text-[12px] font-medium cursor-pointer"
                 >
                   Skip &amp; continue
                 </button>
@@ -417,19 +423,19 @@ function AnalyzingView({
               <button
                 type="button"
                 onClick={() => onRetryItem(errorIndex)}
-                className="h-[32px] px-3.5 rounded-[6px] bg-[#1b6c80] text-white text-[12px] font-medium hover:bg-[#134e5e] flex items-center gap-1 cursor-pointer"
+                className="btn-primary h-8 px-3 text-[12px] font-medium flex items-center gap-1 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[15px]">refresh</span>
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
                 Retry Q{errorItem.questionIndex + 1}
               </button>
             </div>
           </>
         ) : (
-          <div className="flex items-center gap-1.5 text-[12px] text-[#5d5f60]">
-            <span className="material-symbols-outlined text-[15px] text-[#1b6c80]">
+          <div className="flex items-center gap-2 text-[12px] text-[var(--muted)]">
+            <span className="material-symbols-outlined text-[16px] text-[var(--muted)]">
               lock
             </span>
-            <span>Controls are paused until analysis finishes.</span>
+            <span>Controls are paused until analysis finishes</span>
           </div>
         )}
       </div>
@@ -458,7 +464,7 @@ function ReviewView({
   const activeMetrics = activeAnswer ? computeAnswerMetrics(activeAnswer) : null;
 
   const kpis = [
-    { label: "Overall", value: `${sessionMetrics.overallScore}%`, tone: "text-[#131416]" },
+    { label: "Overall", value: `${sessionMetrics.overallScore}%`, tone: "text-[var(--text)]" },
     {
       label: "STAR Structure",
       value: `${sessionMetrics.starScore}%`,
@@ -470,7 +476,7 @@ function ReviewView({
       tone:
         sessionMetrics.deliveryScore !== null
           ? scoreTone(sessionMetrics.deliveryScore)
-          : "text-[#8b8d90]",
+          : "text-[var(--subtle)]",
     },
     {
       label: "Eye Contact & Posture",
@@ -478,35 +484,36 @@ function ReviewView({
       tone:
         sessionMetrics.presenceScore !== null
           ? scoreTone(sessionMetrics.presenceScore)
-          : "text-[#8b8d90]",
+          : "text-[var(--subtle)]",
     },
   ];
 
   return (
     <motion.div
       key={`review-card-${session.id}`}
-      initial={{ opacity: 0, scale: 0.97, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className="w-full max-w-[860px] max-h-[88vh] flex flex-col rounded-[12px] bg-white border border-[#e8eaec] shadow-xl overflow-hidden"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 6 }}
+      transition={{ duration: 0.2, ease: EASE_OUT }}
+      className="w-full max-w-[860px] max-h-[88vh] flex flex-col rounded-[var(--radius-card)] bg-[var(--surface)] border border-[var(--border)] overflow-hidden"
+      style={{ boxShadow: "var(--shadow-popover)" }}
     >
       {/* Fixed Header */}
-      <div className="px-5 py-3.5 border-b border-[#e8eaec] flex items-center justify-between gap-3 shrink-0 bg-white">
+      <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between gap-3 shrink-0 bg-[var(--surface)]">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
             <h2
               id="analysis-modal-title"
-              className="text-[16px] font-semibold text-[#131416]"
+              className="text-[16px] font-medium text-[var(--text)]"
             >
-              Session STAR Review
+              Session STAR review
             </h2>
             <span className="pill-positive gap-1">
-              <span className="material-symbols-outlined text-[13px]">check_circle</span>
+              <span className="material-symbols-outlined text-[14px]">check_circle</span>
               Saved to Reports
             </span>
           </div>
-          <p className="text-[12px] text-[#5d5f60] truncate mt-0.5">
+          <p className="text-[12px] text-[var(--muted)] truncate mt-0.5">
             {targetLabel(session)} · {answers.length}{" "}
             {answers.length === 1 ? "answer" : "answers"} evaluated
           </p>
@@ -515,7 +522,7 @@ function ReviewView({
           type="button"
           onClick={onCloseReview}
           aria-label="Close review"
-          className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5d5f60] hover:text-[#131416] hover:bg-[#f4f6f8] transition-colors cursor-pointer shrink-0"
+          className="w-8 h-8 rounded-[var(--radius-control)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--raised)] transition-colors cursor-pointer shrink-0"
         >
           <span className="material-symbols-outlined text-[18px]">close</span>
         </button>
@@ -524,17 +531,15 @@ function ReviewView({
       {/* Scrollable Body */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         {/* 4-column KPI Summary Strip */}
-        <section className="rounded-[8px] border border-[#e8eaec] grid grid-cols-2 sm:grid-cols-4 divide-x divide-[#e8eaec]">
-          {kpis.map((kpi, i) => (
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {kpis.map((kpi) => (
             <div
               key={kpi.label}
-              className={`p-3.5 ${i >= 2 ? "border-t sm:border-t-0 border-[#e8eaec]" : ""}`}
+              className="kpi-card p-4"
             >
-              <div className="text-[12px] text-[#5d5f60]">{kpi.label}</div>
+              <div className="text-[12px] text-[var(--muted)]">{kpi.label}</div>
               <div
-                className={`mt-1 tabular-nums leading-tight font-semibold ${
-                  i === 0 ? "text-[26px]" : "text-[22px]"
-                } ${kpi.tone}`}
+                className={`mt-1.5 text-[24px] font-medium tabular-nums leading-none ${kpi.tone}`}
               >
                 {kpi.value}
               </div>
@@ -544,7 +549,7 @@ function ReviewView({
 
         {/* Question Tabs */}
         {answers.length > 1 && (
-          <div className="flex flex-wrap gap-1.5 p-1 rounded-[8px] bg-[#f4f6f8] border border-[#e8eaec]">
+          <div className="flex flex-wrap gap-1.5 p-1 rounded-[var(--radius-control)] bg-[var(--raised)] border border-[var(--border)]">
             {answers.map((ans, idx) => {
               const isActive = idx === safeTab;
               return (
@@ -552,21 +557,21 @@ function ReviewView({
                   key={`${ans.question}-${idx}`}
                   type="button"
                   onClick={() => setSelectedTab(idx)}
-                  className={`px-3 py-1.5 rounded-[6px] text-[12.5px] font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
+                  className={`h-8 px-3 rounded-[calc(var(--radius-control)-2px)] text-[12px] font-medium transition-colors flex items-center gap-1.5 cursor-pointer ${
                     isActive
-                      ? "bg-white text-[#131416] shadow-sm border border-[#e8eaec]"
-                      : "text-[#5d5f60] hover:text-[#131416]"
+                      ? "bg-[var(--surface)] text-[var(--text)] border border-[var(--border)]"
+                      : "text-[var(--muted)] hover:text-[var(--text)]"
                   }`}
                 >
-                  <span className="tabular-nums">Q{idx + 1}</span>
+                  <span className="font-mono tabular-nums">Q{idx + 1}</span>
                   <span
-                    className={`text-[11px] tabular-nums px-1.5 py-0.2 rounded-[4px] ${
+                    className={`text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded-[4px] ${
                       starCount(ans.analysis) >= 3
-                        ? "bg-[#dcfae5] text-[#04250e]"
-                        : "bg-[#ebedee] text-[#353736]"
+                        ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
+                        : "bg-[var(--pill-neutral-bg)] text-[var(--pill-neutral-ink)]"
                     }`}
                   >
-                    {starCount(ans.analysis)}/4 STAR
+                    {starCount(ans.analysis)}/4
                   </span>
                 </button>
               );
@@ -579,46 +584,46 @@ function ReviewView({
           <AnimatePresence mode="wait">
             <motion.div
               key={safeTab}
-              initial={{ opacity: 0, y: 6 }}
+              initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.16 }}
+              transition={{ duration: 0.16, ease: EASE_OUT }}
               className="space-y-4"
             >
               {/* Question + Telemetry */}
-              <div className="rounded-[8px] border border-[#e8eaec] bg-[#f9fbfc] p-4 space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#1b6c80]">
+              <div className="rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--raised)] p-4 space-y-3">
+                <div className="text-[12px] font-medium text-[var(--muted)]">
                   Question {safeTab + 1}
                 </div>
-                <h3 className="text-[15px] font-semibold text-[#131416] leading-snug">
+                <h3 className="text-[15px] font-medium text-[var(--text)] leading-snug">
                   {activeAnswer.question}
                 </h3>
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="pill-positive">
                     STAR {starCount(activeAnswer.analysis)}/4
                   </span>
-                  <span className="badge tabular-nums">
+                  <span className="badge font-mono tabular-nums">
                     Keywords {activeAnswer.analysis.coverage}%
                   </span>
                   {activeAnswer.speech && (
                     <>
-                      <span className="badge tabular-nums">
+                      <span className="badge font-mono tabular-nums">
                         {activeAnswer.speech.wpm} WPM
                       </span>
-                      <span className="badge tabular-nums">
+                      <span className="badge font-mono tabular-nums">
                         {activeAnswer.speech.fillerCount} fillers
                       </span>
-                      <span className="badge tabular-nums">
+                      <span className="badge font-mono tabular-nums">
                         {activeAnswer.speech.longPauses} long pauses
                       </span>
                     </>
                   )}
                   {activeAnswer.vision && (
                     <>
-                      <span className="badge tabular-nums">
+                      <span className="badge font-mono tabular-nums">
                         Eye contact {Math.round(activeAnswer.vision.eyeContactScore)}%
                       </span>
-                      <span className="badge tabular-nums">
+                      <span className="badge font-mono tabular-nums">
                         Posture {Math.round(activeAnswer.vision.postureScore)}%
                       </span>
                     </>
@@ -634,47 +639,49 @@ function ReviewView({
                   return (
                     <div
                       key={key}
-                      className="rounded-[8px] border border-[#e8eaec] bg-white p-3.5 space-y-2"
+                      className="rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--surface)] p-4 space-y-2"
                     >
                       <div className="flex items-center gap-2">
                         <span
-                          className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold shrink-0 ${
+                          className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-medium shrink-0 ${
                             section.found
-                              ? "bg-[#dcfae5] text-[#04250e]"
-                              : "bg-[#ffedea] text-[#831c1e]"
+                              ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
+                              : "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]"
                           }`}
                         >
                           {letter}
                         </span>
-                        <span className="text-[13.5px] font-semibold text-[#131416]">
+                        <span className="text-[14px] font-medium text-[var(--text)]">
                           {label}
                         </span>
                         <span
-                          className={`ml-auto text-[11px] font-medium px-2 py-0.5 rounded-[4px] ${
+                          className={`ml-auto text-[12px] font-medium px-2 py-0.5 rounded-[var(--radius-pill)] ${
                             section.found
-                              ? "bg-[#dcfae5] text-[#04250e]"
-                              : "bg-[#ffedea] text-[#831c1e]"
+                              ? "bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
+                              : "bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)]"
                           }`}
                         >
                           {section.found ? "Found" : "Missing"}
                         </span>
                         <span
-                          className={`text-[12px] font-semibold tabular-nums ${scoreTone(pillarScore)}`}
+                          className={`text-[12px] font-mono font-medium tabular-nums ${scoreTone(pillarScore)}`}
                         >
                           {pillarScore}%
                         </span>
                       </div>
 
-                      <div className="h-1.5 bg-[#f0f1f2] rounded-[2px] overflow-hidden">
+                      <div className="h-1.5 bg-[var(--ring-track)] rounded-full overflow-hidden">
                         <div
-                          className={`h-full ${
-                            pillarScore >= 80 ? "bg-[#1b6c80]" : "bg-[#c4242a]"
-                          }`}
-                          style={{ width: `${pillarScore}%` }}
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${pillarScore}%`,
+                            backgroundColor:
+                              pillarScore >= 80 ? "var(--accent)" : "var(--negative)",
+                          }}
                         />
                       </div>
 
-                      <p className="text-[12px] text-[#5d5f60] leading-relaxed">
+                      <p className="text-[12px] text-[var(--muted)] leading-relaxed">
                         {section.explanation}
                       </p>
 
@@ -683,7 +690,7 @@ function ReviewView({
                           {section.sentences.map((sent, sIdx) => (
                             <li
                               key={sIdx}
-                              className="text-[11.5px] text-[#25272a] border-l-2 border-[#1b6c80] pl-2 leading-snug"
+                              className="text-[12px] text-[var(--text-secondary)] border-l-2 border-[var(--accent)] pl-2 leading-snug"
                             >
                               {sent}
                             </li>
@@ -691,7 +698,7 @@ function ReviewView({
                         </ul>
                       )}
 
-                      <p className="text-[12px] text-[#134e5e] bg-[#f4f9fb] rounded-[6px] px-2.5 py-1.5">
+                      <p className="text-[12px] text-[var(--accent-ink)] bg-[var(--accent-soft)]/50 rounded-[var(--radius-control)] px-2.5 py-1.5">
                         {section.suggestion}
                       </p>
                     </div>
@@ -701,12 +708,12 @@ function ReviewView({
 
               {/* Matched & Missing Keywords */}
               {activeAnswer.analysis.keywordGroups.length > 0 && (
-                <div className="rounded-[8px] border border-[#e8eaec] p-4 space-y-3">
+                <div className="rounded-[var(--radius-card)] border border-[var(--border)] p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-[13.5px] font-semibold text-[#131416]">
+                    <h4 className="text-[14px] font-medium text-[var(--text)]">
                       Keyword coverage
                     </h4>
-                    <span className="text-[12px] text-[#5d5f60] tabular-nums">
+                    <span className="text-[12px] font-mono text-[var(--muted)] tabular-nums">
                       {activeAnswer.analysis.matchedCount} matched ·{" "}
                       {activeAnswer.analysis.missingCount} missing
                     </span>
@@ -715,15 +722,15 @@ function ReviewView({
                     {activeAnswer.analysis.keywordGroups.map((group) => (
                       <div
                         key={group.category}
-                        className="border-t border-[#f0f1f2] pt-2.5 first:border-0 first:pt-0 space-y-1.5"
+                        className="border-t border-[var(--rule)] pt-2.5 first:border-0 first:pt-0 space-y-1.5"
                       >
-                        <div className="text-[12px] font-medium text-[#131416]">
+                        <div className="text-[12px] font-medium text-[var(--text)]">
                           {group.label}
                         </div>
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {group.matched.map((kw) => (
                             <span key={`m-${kw}`} className="pill-positive">
-                              ✓ {kw}
+                              {kw}
                             </span>
                           ))}
                           {group.missing.map((kw) => (
@@ -739,33 +746,33 @@ function ReviewView({
               )}
 
               {/* Detected fillers + Sentence breakdown toggle */}
-              <div className="rounded-[8px] border border-[#e8eaec] overflow-hidden">
+              <div className="rounded-[var(--radius-card)] border border-[var(--border)] overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setShowSentences((v) => !v)}
                   aria-expanded={showSentences}
-                  className="w-full px-4 h-[42px] flex items-center justify-between text-left hover:bg-[#f9fbfc] transition-colors cursor-pointer"
+                  className="w-full px-4 h-11 flex items-center justify-between text-left hover:bg-[var(--raised)]/60 transition-colors cursor-pointer"
                 >
-                  <span className="text-[13px] font-medium text-[#131416]">
+                  <span className="text-[13px] font-medium text-[var(--text)]">
                     Sentence classification &amp; transcript ({activeAnswer.analysis.sentences.length}{" "}
                     sentences)
                   </span>
-                  <span className="material-symbols-outlined text-[18px] text-[#5d5f60]">
+                  <span className="material-symbols-outlined text-[18px] text-[var(--muted)]">
                     {showSentences ? "expand_less" : "expand_more"}
                   </span>
                 </button>
                 {showSentences && (
-                  <div className="px-4 pb-4 space-y-2.5 border-t border-[#f0f1f2] pt-3">
+                  <div className="px-4 pb-4 space-y-2.5 border-t border-[var(--rule)] pt-3">
                     {activeAnswer.speech && activeAnswer.speech.fillers.length > 0 && (
-                      <div className="text-[12px] text-[#5d5f60]">
+                      <div className="text-[12px] text-[var(--muted)]">
                         Detected fillers:{" "}
-                        <span className="font-medium text-[#131416]">
+                        <span className="font-medium text-[var(--text)]">
                           {activeAnswer.speech.fillers.join(", ")}
                         </span>
                       </div>
                     )}
                     {activeAnswer.analysis.sentences.length === 0 ? (
-                      <p className="text-[12.5px] text-[#5d5f60]">
+                      <p className="text-[13px] text-[var(--muted)]">
                         {activeAnswer.transcript || "No transcript available."}
                       </p>
                     ) : (
@@ -777,23 +784,23 @@ function ReviewView({
                               : STAR_META.find((s) => s.key === item.section)?.label;
                           const tone =
                             item.section === "situation"
-                              ? "border-[#2f70bb] bg-[#eff6ff]"
+                              ? "border-[var(--star-s-border)] bg-[var(--star-s-bg)]"
                               : item.section === "task"
-                                ? "border-[#a86f0c] bg-[#fffbeb]"
+                                ? "border-[var(--star-t-border)] bg-[var(--star-t-bg)]"
                                 : item.section === "action"
-                                  ? "border-[#1b6c80] bg-[#eef4f6]"
+                                  ? "border-[var(--star-a-border)] bg-[var(--star-a-bg)]"
                                   : item.section === "result"
-                                    ? "border-[#1e7b4f] bg-[#effaf3]"
-                                    : "border-[#cdced1] bg-[#f9fbfc]";
+                                    ? "border-[var(--star-r-border)] bg-[var(--star-r-bg)]"
+                                    : "border-[var(--control)] bg-[var(--raised)]";
                           return (
                             <div
                               key={sIdx}
-                              className={`rounded-[6px] border-l-[3px] px-3 py-2 ${tone}`}
+                              className={`rounded-[var(--radius-control)] border-l-[3px] px-3 py-2 ${tone}`}
                             >
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-[#45474a]">
+                              <div className="text-[12px] font-medium text-[var(--muted)]">
                                 {label}
                               </div>
-                              <p className="text-[12.5px] text-[#131416] mt-0.5">
+                              <p className="text-[13px] text-[var(--text)] mt-0.5">
                                 {item.text}
                               </p>
                             </div>
@@ -807,15 +814,15 @@ function ReviewView({
 
               {/* Top Coaching Tips */}
               {activeAnswer.analysis.coaching.length > 0 && (
-                <div className="rounded-[8px] border border-[#e8eaec] p-4 space-y-2">
-                  <h4 className="text-[13.5px] font-semibold text-[#131416]">
+                <div className="rounded-[var(--radius-card)] border border-[var(--border)] p-4 space-y-2.5">
+                  <h4 className="text-[14px] font-medium text-[var(--text)]">
                     What to improve
                   </h4>
-                  <ol className="space-y-1.5">
+                  <ol className="space-y-2">
                     {activeAnswer.analysis.coaching.slice(0, 3).map((tip, tIdx) => (
-                      <li key={tIdx} className="flex gap-2.5 text-[13px] text-[#131416]">
-                        <span className="w-5 h-5 shrink-0 rounded-full bg-[#eef4f6] text-[#134e5e] text-[12px] font-medium flex items-center justify-center tabular-nums">
-                          {tIdx + 1}
+                      <li key={tIdx} className="flex items-baseline gap-2.5 text-[13px] text-[var(--text)]">
+                        <span className="text-[12px] font-mono tabular-nums text-[var(--muted)] shrink-0">
+                          0{tIdx + 1}
                         </span>
                         <span>{tip}</span>
                       </li>
@@ -829,19 +836,19 @@ function ReviewView({
       </div>
 
       {/* Fixed Footer */}
-      <div className="px-5 py-3 bg-[#f9fbfc] border-t border-[#e8eaec] flex flex-wrap items-center justify-between gap-2 shrink-0">
+      <div className="px-5 py-3 bg-[var(--raised)]/60 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={onCloseReview}
-            className="h-[34px] px-3.5 rounded-[6px] border border-[#cdced1] bg-white text-[13px] font-medium text-[#131416] hover:bg-[#f4f6f8] transition-colors cursor-pointer"
+            className="btn-secondary h-9 px-3.5 text-[13px] font-medium cursor-pointer"
           >
             Back to Practice
           </button>
           <button
             type="button"
             onClick={onStartNewSession}
-            className="h-[34px] px-3.5 rounded-[6px] border border-[#cdced1] bg-white text-[13px] font-medium text-[#131416] hover:bg-[#f4f6f8] transition-colors cursor-pointer"
+            className="btn-secondary h-9 px-3.5 text-[13px] font-medium cursor-pointer"
           >
             New Session
           </button>
@@ -850,10 +857,10 @@ function ReviewView({
         <button
           type="button"
           onClick={() => onViewFullReport(session.id)}
-          className="h-[34px] px-4 rounded-[6px] bg-[#1b6c80] text-white text-[13px] font-medium hover:bg-[#134e5e] transition-colors flex items-center gap-1.5 cursor-pointer"
+          className="btn-primary h-9 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[17px]">insights</span>
-          View Full Report
+          <span className="material-symbols-outlined text-[16px]">insights</span>
+          View full report
           <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
         </button>
       </div>
@@ -969,8 +976,8 @@ export default function SessionAnalysisModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#131416]/55 backdrop-blur-[3px]"
+          transition={{ duration: 0.18, ease: EASE_OUT }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60"
         >
           <div
             ref={dialogRef}

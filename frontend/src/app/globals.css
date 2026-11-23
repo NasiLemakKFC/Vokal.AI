@@ -1,117 +1,537 @@
 @import "tailwindcss";
 
 /* =============================================================================
-   Vokal.ai — Framed-Sheet App Design System (design-taste-frontend v2)
-   Seed: 1353451086 · Style: framed-sheet (light)
-   - L-shaped tinted chrome ground (#f9fbfc) holding Sidebar + 48px TopHeader
-   - Inset white work sheet (#ffffff) with 1px #e8eaec border, 16px corners
-   - Flat resting cards (no drop shadow at rest), 1px hairline dividers
-   - IBM Plex Sans for UI & prose; IBM Plex Mono + tabular-nums for telemetry/IDs
+   Vokal.ai — Multi-Theme Design System (3 Presets × Day/Night)
+   Themes (data-theme):
+     - "editorial" (default): Warm neutral paper + terracotta accent
+     - "studio": Cool studio slate + cyan telemetry accent
+     - "bento": Crisp graphite + cobalt accent
+   Modes (data-mode): "light" | "dark"
    ============================================================================= */
 
 :root {
-  /* ── Framed-Sheet Core Tokens ── */
-  --ground: #f9fbfc;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-display: var(--font-instrument), system-ui, -apple-system, sans-serif;
+  --font-body: var(--font-instrument), system-ui, -apple-system, sans-serif;
+}
+
+:root,
+:root[data-theme="editorial"],
+:root[data-theme="editorial"][data-mode="light"] {
+  /* ── Surfaces ── */
+  --ground: #f5f3ef;
+  --sheet: #faf9f6;
   --surface: #ffffff;
-  --raised: #f4f6f8;
-  --active: #ebedee;
-  --border: #e8eaec;
-  --rule: #f0f1f2;
-  --control: #cdced1;
-  --text: #131416;
-  --muted: #5d5f60;
-  --accent: #1b6c80;
-  --positive: #1e7b4f;
-  --negative: #c4242a;
-  --warning-ink: #92400e;
-  --chart-1: #1b6c80;
-  --chart-2: #2f70bb;
-  --chart-3: #a86f0c;
+  --raised: #f0ede6;
+  --active: #e6e1d7;
+  --input-bg: #ffffff;
+  --ring-track: #e8e3da;
 
-  /* ── Status Pill Pairs (4.5:1+ contrast) ── */
-  --pill-positive-bg: #dcfae5;
-  --pill-positive-ink: #04250e;
-  --pill-negative-bg: #ffedea;
-  --pill-negative-ink: #831c1e;
-  --pill-warning-bg: #fffbeb;
+  /* ── Borders & Hairlines ── */
+  --border: rgba(31, 27, 22, 0.09);
+  --rule: rgba(31, 27, 22, 0.07);
+  --control: rgba(31, 27, 22, 0.16);
+  --border-accent: rgba(199, 74, 45, 0.35);
+
+  /* ── Ink / Typography ── */
+  --text: #1f1b16;
+  --text-secondary: #5e554a;
+  --muted: #766d61;
+  --subtle: #8c8276;
+
+  /* ── Brand & Accents ── */
+  --accent: #c74a2d;
+  --accent-hover: #b03f24;
+  --accent-fg: #ffffff;
+  --accent-soft: #faeae5;
+  --accent-ink: #9c341c;
+  --secondary: #4f46e5;
+  --accent-coral: #b45309;
+
+  /* ── Semantic Status ── */
+  --positive: #16a34a;
+  --negative: #dc2626;
+  --warning-ink: #b45309;
+
+  --pill-positive-bg: #eaf7ef;
+  --pill-positive-ink: #115e32;
+  --pill-positive-border: rgba(22, 163, 74, 0.25);
+  --pill-negative-bg: #fdecec;
+  --pill-negative-ink: #991b1b;
+  --pill-negative-border: rgba(220, 38, 38, 0.25);
+  --pill-warning-bg: #fef6e6;
   --pill-warning-ink: #92400e;
-  --pill-neutral-bg: #ebedee;
-  --pill-neutral-ink: #353736;
+  --pill-warning-border: rgba(180, 83, 9, 0.25);
+  --pill-neutral-bg: #ede9e1;
+  --pill-neutral-ink: #4a433a;
 
-  /* ── Compatibility & Semantic Mapping ── */
+  /* ── STAR Sentence Classification Tints ── */
+  --star-s-bg: #f1f5fb;
+  --star-s-border: #3b6fd8;
+  --star-t-bg: #fcf6ea;
+  --star-t-border: #c57a10;
+  --star-a-bg: #fbf0ec;
+  --star-a-border: #c74a2d;
+  --star-r-bg: #eef8f2;
+  --star-r-border: #16a34a;
+
+  /* ── KPI Card Surface ── */
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  /* ── Geometry & Elevation ── */
+  --radius-sheet: 16px;
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-pill: 6px;
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --btn-primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  /* ── Compatibility Aliases ── */
   --background: var(--ground);
-  --surface-active: #eef4f6;
+  --surface-active: var(--accent-soft);
   --on-surface: var(--text);
-  --on-surface-variant: #25272a;
-  --on-surface-muted: #45474a;
+  --on-surface-variant: var(--text-secondary);
+  --on-surface-muted: var(--text-secondary);
   --on-surface-subtle: var(--muted);
-
   --outline: var(--border);
-  --outline-accent: #b8d4dc;
-
+  --outline-accent: var(--border-accent);
   --primary: var(--accent);
-  --primary-strong: #134e5e;
-  --secondary: #2f70bb;
-  --accent-coral: #a86f0c;
-
-  --badge-bg: #e6f2f5;
-  --badge-text: #134e5e;
-
+  --primary-strong: var(--accent-hover);
+  --badge-bg: var(--accent-soft);
+  --badge-text: var(--accent-ink);
   --success: var(--positive);
   --error: var(--negative);
   --warning: var(--warning-ink);
+  --chart-1: var(--accent);
+  --chart-2: var(--secondary);
+  --chart-3: var(--accent-coral);
+  --radius-sm: var(--radius-control);
+  --radius-md: var(--radius-card);
+  --radius-full: var(--radius-pill);
+}
 
-  /* ── Radii & Metrics ── */
+/* =============================================================================
+   1B. Warm Editorial — Night Mode
+   ============================================================================= */
+:root[data-theme="editorial"][data-mode="dark"] {
+  --ground: #12110f;
+  --sheet: #161513;
+  --surface: #1c1a18;
+  --raised: #24211e;
+  --active: #2c2824;
+  --input-bg: #161513;
+  --ring-track: #2b2723;
+
+  --border: rgba(239, 233, 222, 0.09);
+  --rule: rgba(239, 233, 222, 0.07);
+  --control: rgba(239, 233, 222, 0.18);
+  --border-accent: rgba(238, 115, 85, 0.35);
+
+  --text: #efe9de;
+  --text-secondary: #b5aea2;
+  --muted: #8a847a;
+  --subtle: #6e685f;
+
+  --accent: #ee7355;
+  --accent-hover: #f3886d;
+  --accent-fg: #180c08;
+  --accent-soft: rgba(238, 115, 85, 0.14);
+  --accent-ink: #f79d86;
+  --secondary: #818cf8;
+  --accent-coral: #f59e0b;
+
+  --positive: #4cc38a;
+  --negative: #e5484d;
+  --warning-ink: #f59e0b;
+
+  --pill-positive-bg: rgba(76, 195, 138, 0.14);
+  --pill-positive-ink: #72d6a6;
+  --pill-positive-border: rgba(76, 195, 138, 0.28);
+  --pill-negative-bg: rgba(229, 72, 77, 0.14);
+  --pill-negative-ink: #f28588;
+  --pill-negative-border: rgba(229, 72, 77, 0.28);
+  --pill-warning-bg: rgba(245, 158, 11, 0.14);
+  --pill-warning-ink: #fbbf24;
+  --pill-warning-border: rgba(245, 158, 11, 0.28);
+  --pill-neutral-bg: #26231f;
+  --pill-neutral-ink: #b5aea2;
+
+  --star-s-bg: rgba(96, 165, 250, 0.10);
+  --star-s-border: #60a5fa;
+  --star-t-bg: rgba(245, 158, 11, 0.10);
+  --star-t-border: #f59e0b;
+  --star-a-bg: rgba(238, 115, 85, 0.12);
+  --star-a-border: #ee7355;
+  --star-r-bg: rgba(76, 195, 138, 0.10);
+  --star-r-border: #4cc38a;
+
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  --shadow-sheet: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-popover: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --btn-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* =============================================================================
+   2A. Broadcast Studio — Day Mode
+   ============================================================================= */
+:root[data-theme="studio"][data-mode="light"] {
+  --ground: #f2f4f7;
+  --sheet: #f8f9fb;
+  --surface: #ffffff;
+  --raised: #edf0f5;
+  --active: #e2e6ee;
+  --input-bg: #ffffff;
+  --ring-track: #e4e8f0;
+
+  --border: rgba(17, 24, 39, 0.09);
+  --rule: rgba(17, 24, 39, 0.07);
+  --control: rgba(17, 24, 39, 0.16);
+  --border-accent: rgba(11, 123, 148, 0.35);
+
+  --text: #111827;
+  --text-secondary: #4b5565;
+  --muted: #6b7487;
+  --subtle: #8690a2;
+
+  --accent: #0b7b94;
+  --accent-hover: #09667b;
+  --accent-fg: #ffffff;
+  --accent-soft: #e6f4f7;
+  --accent-ink: #085d70;
+  --secondary: #16a34a;
+  --accent-coral: #b45309;
+
+  --positive: #16a34a;
+  --negative: #dc2626;
+  --warning-ink: #b45309;
+
+  --pill-positive-bg: #eaf7ef;
+  --pill-positive-ink: #115e32;
+  --pill-positive-border: rgba(22, 163, 74, 0.25);
+  --pill-negative-bg: #fdecec;
+  --pill-negative-ink: #991b1b;
+  --pill-negative-border: rgba(220, 38, 38, 0.25);
+  --pill-warning-bg: #fef6e6;
+  --pill-warning-ink: #92400e;
+  --pill-warning-border: rgba(180, 83, 9, 0.25);
+  --pill-neutral-bg: #e7ebf2;
+  --pill-neutral-ink: #374151;
+
+  --star-s-bg: #eff5fc;
+  --star-s-border: #2563eb;
+  --star-t-bg: #fef7e8;
+  --star-t-border: #d97706;
+  --star-a-bg: #eaf6f8;
+  --star-a-border: #0b7b94;
+  --star-r-bg: #ecf9f1;
+  --star-r-border: #16a34a;
+
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  --radius-sheet: 12px;
   --radius-card: 8px;
   --radius-control: 6px;
-  --radius-sheet: 16px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-full: 9999px;
+  --radius-pill: 4px;
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --btn-primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* =============================================================================
+   2B. Broadcast Studio — Night Mode
+   ============================================================================= */
+:root[data-theme="studio"][data-mode="dark"] {
+  --ground: #0f1012;
+  --sheet: #141518;
+  --surface: #1a1c20;
+  --raised: #22252b;
+  --active: #2b2f37;
+  --input-bg: #141518;
+  --ring-track: #262930;
+
+  --border: rgba(238, 240, 245, 0.09);
+  --rule: rgba(238, 240, 245, 0.07);
+  --control: rgba(238, 240, 245, 0.18);
+  --border-accent: rgba(60, 196, 220, 0.35);
+
+  --text: #eef0f5;
+  --text-secondary: #a3a9b8;
+  --muted: #7a8296;
+  --subtle: #62697a;
+
+  --accent: #3cc4dc;
+  --accent-hover: #58d0e5;
+  --accent-fg: #061418;
+  --accent-soft: rgba(60, 196, 220, 0.14);
+  --accent-ink: #72d7e9;
+  --secondary: #4cc38a;
+  --accent-coral: #f59e0b;
+
+  --positive: #4cc38a;
+  --negative: #e5484d;
+  --warning-ink: #f59e0b;
+
+  --pill-positive-bg: rgba(76, 195, 138, 0.14);
+  --pill-positive-ink: #72d6a6;
+  --pill-positive-border: rgba(76, 195, 138, 0.28);
+  --pill-negative-bg: rgba(229, 72, 77, 0.14);
+  --pill-negative-ink: #f28588;
+  --pill-negative-border: rgba(229, 72, 77, 0.28);
+  --pill-warning-bg: rgba(245, 158, 11, 0.14);
+  --pill-warning-ink: #fbbf24;
+  --pill-warning-border: rgba(245, 158, 11, 0.28);
+  --pill-neutral-bg: #23262d;
+  --pill-neutral-ink: #a3a9b8;
+
+  --star-s-bg: rgba(96, 165, 250, 0.10);
+  --star-s-border: #60a5fa;
+  --star-t-bg: rgba(245, 158, 11, 0.10);
+  --star-t-border: #f59e0b;
+  --star-a-bg: rgba(60, 196, 220, 0.12);
+  --star-a-border: #3cc4dc;
+  --star-r-bg: rgba(76, 195, 138, 0.10);
+  --star-r-border: #4cc38a;
+
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  --radius-sheet: 12px;
+  --radius-card: 8px;
+  --radius-control: 6px;
+  --radius-pill: 4px;
+  --shadow-sheet: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-popover: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --btn-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* =============================================================================
+   3A. Crisp Graphite — Day Mode
+   ============================================================================= */
+:root[data-theme="bento"][data-mode="light"] {
+  --ground: #f4f4f5;
+  --sheet: #fafafa;
+  --surface: #ffffff;
+  --raised: #f0f0f2;
+  --active: #e4e4e7;
+  --input-bg: #ffffff;
+  --ring-track: #e4e4e7;
+
+  --border: rgba(23, 23, 23, 0.09);
+  --rule: rgba(23, 23, 23, 0.07);
+  --control: rgba(23, 23, 23, 0.16);
+  --border-accent: rgba(37, 99, 235, 0.35);
+
+  --text: #171717;
+  --text-secondary: #525252;
+  --muted: #737373;
+  --subtle: #8c8c8c;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-fg: #ffffff;
+  --accent-soft: #ebf1fe;
+  --accent-ink: #1d4ed8;
+  --secondary: #4f46e5;
+  --accent-coral: #b45309;
+
+  --positive: #16a34a;
+  --negative: #dc2626;
+  --warning-ink: #b45309;
+
+  --pill-positive-bg: #eaf7ef;
+  --pill-positive-ink: #115e32;
+  --pill-positive-border: rgba(22, 163, 74, 0.25);
+  --pill-negative-bg: #fdecec;
+  --pill-negative-ink: #991b1b;
+  --pill-negative-border: rgba(220, 38, 38, 0.25);
+  --pill-warning-bg: #fef6e6;
+  --pill-warning-ink: #92400e;
+  --pill-warning-border: rgba(180, 83, 9, 0.25);
+  --pill-neutral-bg: #ececef;
+  --pill-neutral-ink: #404040;
+
+  --star-s-bg: #eff5fc;
+  --star-s-border: #2563eb;
+  --star-t-bg: #fef7e8;
+  --star-t-border: #d97706;
+  --star-a-bg: #f3f1fd;
+  --star-a-border: #6d28d9;
+  --star-r-bg: #ecf9f1;
+  --star-r-border: #16a34a;
+
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  --radius-sheet: 20px;
+  --radius-card: 14px;
+  --radius-control: 8px;
+  --radius-pill: 6px;
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --shadow-dock: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --btn-primary-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* =============================================================================
+   3B. Crisp Graphite — Night Mode
+   ============================================================================= */
+:root[data-theme="bento"][data-mode="dark"] {
+  --ground: #0f0f10;
+  --sheet: #141415;
+  --surface: #19191b;
+  --raised: #232325;
+  --active: #2c2c2f;
+  --input-bg: #141415;
+  --ring-track: #27272a;
+
+  --border: rgba(237, 237, 237, 0.09);
+  --rule: rgba(237, 237, 237, 0.07);
+  --control: rgba(237, 237, 237, 0.18);
+  --border-accent: rgba(96, 165, 250, 0.35);
+
+  --text: #ededed;
+  --text-secondary: #a1a1a6;
+  --muted: #85858b;
+  --subtle: #6b6b70;
+
+  --accent: #60a5fa;
+  --accent-hover: #7bb6ff;
+  --accent-fg: #081326;
+  --accent-soft: rgba(96, 165, 250, 0.14);
+  --accent-ink: #93c5fd;
+  --secondary: #818cf8;
+  --accent-coral: #f59e0b;
+
+  --positive: #4cc38a;
+  --negative: #e5484d;
+  --warning-ink: #f59e0b;
+
+  --pill-positive-bg: rgba(76, 195, 138, 0.14);
+  --pill-positive-ink: #72d6a6;
+  --pill-positive-border: rgba(76, 195, 138, 0.28);
+  --pill-negative-bg: rgba(229, 72, 77, 0.14);
+  --pill-negative-ink: #f28588;
+  --pill-negative-border: rgba(229, 72, 77, 0.28);
+  --pill-warning-bg: rgba(245, 158, 11, 0.14);
+  --pill-warning-ink: #fbbf24;
+  --pill-warning-border: rgba(245, 158, 11, 0.28);
+  --pill-neutral-bg: #232326;
+  --pill-neutral-ink: #a1a1a6;
+
+  --star-s-bg: rgba(96, 165, 250, 0.10);
+  --star-s-border: #60a5fa;
+  --star-t-bg: rgba(245, 158, 11, 0.10);
+  --star-t-border: #f59e0b;
+  --star-a-bg: rgba(167, 139, 250, 0.12);
+  --star-a-border: #a78bfa;
+  --star-r-bg: rgba(76, 195, 138, 0.10);
+  --star-r-border: #4cc38a;
+
+  --kpi-tint-1: var(--surface);
+  --kpi-tint-2: var(--surface);
+  --kpi-tint-3: var(--surface);
+  --kpi-tint-4: var(--surface);
+
+  --radius-sheet: 20px;
+  --radius-card: 14px;
+  --radius-control: 8px;
+  --radius-pill: 6px;
+  --shadow-sheet: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-card-hover: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --shadow-dock: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-popover: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --btn-primary-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 @theme inline {
-  --color-background: var(--background);
+  --color-background: var(--ground);
+  --color-sheet: var(--sheet);
   --color-surface: var(--surface);
-  --color-surface-active: var(--surface-active);
+  --color-surface-active: var(--accent-soft);
   --color-raised: var(--raised);
+  --color-active: var(--active);
 
-  --color-on-surface: var(--on-surface);
-  --color-on-surface-variant: var(--on-surface-variant);
-  --color-on-surface-muted: var(--on-surface-muted);
-  --color-on-surface-subtle: var(--on-surface-subtle);
+  --color-on-surface: var(--text);
+  --color-on-surface-variant: var(--text-secondary);
+  --color-on-surface-muted: var(--text-secondary);
+  --color-on-surface-subtle: var(--muted);
 
-  --color-outline: var(--outline);
-  --color-outline-accent: var(--outline-accent);
+  --color-outline: var(--border);
+  --color-outline-accent: var(--border-accent);
+  --color-control: var(--control);
 
-  --color-primary: var(--primary);
-  --color-primary-strong: var(--primary-strong);
+  --color-primary: var(--accent);
+  --color-primary-strong: var(--accent-hover);
   --color-secondary: var(--secondary);
   --color-accent-coral: var(--accent-coral);
 
-  --color-badge-bg: var(--badge-bg);
-  --color-badge-text: var(--badge-text);
+  --color-badge-bg: var(--accent-soft);
+  --color-badge-text: var(--accent-ink);
 
-  --color-success: var(--success);
-  --color-error: var(--error);
-  --color-warning: var(--warning);
+  --color-success: var(--positive);
+  --color-error: var(--negative);
+  --color-warning: var(--warning-ink);
 
-  --font-sans: var(--font-plex-sans), "IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-plex-mono), "IBM Plex Mono", monospace;
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, monospace;
 }
 
-/* ── Base Reset ── */
+/* ── Base Reset & Smooth Theme Transitions ── */
 body {
   background: var(--ground);
   color: var(--text);
-  font-family: var(--font-sans);
+  font-family: var(--font-body);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.24s var(--ease-out), color 0.2s var(--ease-out);
 }
 
-/* ── Tabular Numerals Rule (design-taste-frontend §7.4 / §9.1) ── */
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Tabular Numerals Rule ── */
 .num,
 .font-mono,
 .tabular-nums {
@@ -135,59 +555,164 @@ body {
   -webkit-font-smoothing: antialiased;
   font-variation-settings:
     "FILL" 0,
-    "wght" 400,
+    "wght" 350,
     "GRAD" 0,
     "opsz" 20;
 }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cdced1;
+  background: var(--control);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--muted);
 }
 
-/* ── Card Default (Flat 1px border, 8px radius) ── */
+/* ── App Sheet Container ── */
+.app-sheet {
+  background-color: var(--sheet);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sheet);
+  transition: background-color 0.24s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+
+@media (min-width: 1024px) {
+  .app-sheet {
+    border-radius: var(--radius-sheet);
+  }
+}
+
+/* ── Card Default (Themed Surface, Radius, Depth) ── */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
   padding: 20px;
+  transition: background-color 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
 }
 
-/* ── Highlighted / Selected Surface ── */
-.card-active {
-  background: var(--raised);
-  border: 1px solid var(--control);
-  border-radius: var(--radius-card);
-  padding: 20px;
-}
-
-/* ── Divided KPI Strip Container (app-screens §5) ── */
-.kpi-strip {
+.card-interactive {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  display: grid;
-  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: background-color 0.16s var(--ease-out), border-color 0.16s var(--ease-out);
 }
 
-/* ── Status & Meta Pills (app-screens §7.6 — min 11px, pale tint + dark ink) ── */
+.card-interactive:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--control);
+}
+
+.card-active {
+  background: var(--raised);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-card);
+  padding: 20px;
+}
+
+/* ── KPI Tiles (Clean Surface, Uniform Height) ── */
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: background-color 0.16s var(--ease-out), border-color 0.16s var(--ease-out);
+}
+
+.kpi-card:hover {
+  border-color: var(--control);
+}
+
+.kpi-tint-1,
+.kpi-tint-2,
+.kpi-tint-3,
+.kpi-tint-4 {
+  background: var(--surface);
+}
+
+/* ── Controls & Buttons ── */
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-radius: var(--radius-control);
+  box-shadow: var(--btn-primary-shadow);
+  transition: background-color 0.15s var(--ease-out), transform 0.12s var(--ease-out), opacity 0.15s var(--ease-out);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  transition: background-color 0.15s var(--ease-out), border-color 0.15s var(--ease-out), transform 0.12s var(--ease-out);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--raised);
+  border-color: var(--muted);
+}
+.btn-secondary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.input-field {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  transition: border-color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
+}
+.input-field:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Floating Control Dock ── */
+.control-dock {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-dock);
+  transition: background-color 0.2s var(--ease-out), border-color 0.2s var(--ease-out);
+}
+
+.control-dock-recording {
+  border-color: var(--accent);
+}
+
+/* ── On-Air Focus Dimming (Warm Editorial studio cue) ── */
+.on-air-chrome-dim {
+  transition: opacity 0.35s var(--ease-out);
+}
+:root[data-theme="editorial"][data-on-air="true"] .on-air-chrome-dim {
+  opacity: 0.62;
+}
+:root[data-theme="editorial"][data-on-air="true"] .on-air-chrome-dim:hover {
+  opacity: 1;
+}
+
+/* ── Status & Meta Tags ── */
 .badge {
   background: var(--pill-neutral-bg);
   color: var(--pill-neutral-ink);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   padding: 2px 8px;
   display: inline-flex;
   align-items: center;
@@ -198,9 +723,10 @@ body {
 .pill-positive {
   background: var(--pill-positive-bg);
   color: var(--pill-positive-ink);
-  font-size: 11px;
+  border: 1px solid var(--pill-positive-border);
+  font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   padding: 2px 8px;
   display: inline-flex;
   align-items: center;
@@ -210,10 +736,10 @@ body {
 .pill-warning {
   background: var(--pill-warning-bg);
   color: var(--pill-warning-ink);
-  border: 1px solid #fde68a;
-  font-size: 11px;
+  border: 1px solid var(--pill-warning-border);
+  font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   padding: 2px 8px;
   display: inline-flex;
   align-items: center;
@@ -223,9 +749,10 @@ body {
 .pill-negative {
   background: var(--pill-negative-bg);
   color: var(--pill-negative-ink);
-  font-size: 11px;
+  border: 1px solid var(--pill-negative-border);
+  font-size: 12px;
   font-weight: 500;
-  border-radius: 4px;
+  border-radius: var(--radius-pill);
   padding: 2px 8px;
   display: inline-flex;
   align-items: center;

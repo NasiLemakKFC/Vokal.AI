@@ -159,28 +159,29 @@ export default function DeviceSettingsModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="device-modal-title"
-        className="w-full max-w-lg bg-white text-[#131416] rounded-[8px] border border-[#e8eaec] overflow-hidden"
+        className="w-full max-w-lg bg-[var(--surface)] text-[var(--text)] rounded-[var(--radius-card)] border border-[var(--border)] overflow-hidden"
+        style={{ boxShadow: "var(--shadow-popover)" }}
       >
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-[#e8eaec] flex items-center justify-between bg-white">
+        <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--surface)]">
           <div>
-            <h2 id="device-modal-title" className="text-[15px] font-semibold text-[#131416]">
-              Audio &amp; Video Hardware Setup
+            <h2 id="device-modal-title" className="text-[16px] font-medium text-[var(--text)]">
+              Audio and video
             </h2>
-            <p className="text-[12px] text-[#5d5f60]">
-              Select input devices for client-side vision and Whisper ASR
+            <p className="text-[12px] text-[var(--muted)] mt-0.5">
+              Choose your camera and microphone
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="w-7 h-7 rounded-[6px] flex items-center justify-center text-[#5d5f60] hover:text-[#131416] hover:bg-[#f4f6f8] transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-[var(--radius-control)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--raised)] transition-colors cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px] leading-none">
               close
@@ -195,11 +196,11 @@ export default function DeviceSettingsModal({
             <div className="flex items-center justify-between">
               <label
                 htmlFor="webcam-select"
-                className="text-[13px] font-medium text-[#131416]"
+                className="text-[13px] font-medium text-[var(--text)]"
               >
-                Webcam Input
+                Webcam input
               </label>
-              <span className="text-[12px] text-[#5d5f60] tabular-nums">
+              <span className="text-[12px] text-[var(--muted)] font-mono tabular-nums">
                 {videoDevices.length} available
               </span>
             </div>
@@ -209,7 +210,7 @@ export default function DeviceSettingsModal({
                 id="webcam-select"
                 value={selectedVideoId}
                 onChange={(e) => onSelectVideo(e.target.value)}
-                className="w-full h-[38px] appearance-none bg-white border border-[#cdced1] focus:border-[#1b6c80] text-[#131416] rounded-[6px] px-3 pr-9 text-[13px] transition-colors outline-none cursor-pointer"
+                className="input-field w-full h-9 appearance-none px-3 pr-9 text-[13px] cursor-pointer"
               >
                 {videoDevices.length === 0 ? (
                   <option value="">Default HD camera</option>
@@ -221,22 +222,22 @@ export default function DeviceSettingsModal({
                   ))
                 )}
               </select>
-              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5d5f60] pointer-events-none text-[18px] leading-none">
+              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none text-[18px] leading-none">
                 expand_more
               </span>
             </div>
           </div>
 
           {/* Microphone Selection */}
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label
                 htmlFor="mic-select"
-                className="text-[13px] font-medium text-[#131416]"
+                className="text-[13px] font-medium text-[var(--text)]"
               >
-                Microphone Input
+                Microphone input
               </label>
-              <span className="text-[12px] text-[#5d5f60] tabular-nums">
+              <span className="text-[12px] text-[var(--muted)] font-mono tabular-nums">
                 {audioDevices.length} available
               </span>
             </div>
@@ -246,7 +247,7 @@ export default function DeviceSettingsModal({
                 id="mic-select"
                 value={selectedAudioId}
                 onChange={(e) => onSelectAudio(e.target.value)}
-                className="w-full h-[38px] appearance-none bg-white border border-[#cdced1] focus:border-[#1b6c80] text-[#131416] rounded-[6px] px-3 pr-9 text-[13px] transition-colors outline-none cursor-pointer"
+                className="input-field w-full h-9 appearance-none px-3 pr-9 text-[13px] cursor-pointer"
               >
                 {audioDevices.length === 0 ? (
                   <option value="">Default system microphone</option>
@@ -258,41 +259,41 @@ export default function DeviceSettingsModal({
                   ))
                 )}
               </select>
-              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5d5f60] pointer-events-none text-[18px] leading-none">
+              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none text-[18px] leading-none">
                 expand_more
               </span>
             </div>
 
             {/* Live Audio Input Level Tester */}
-            <div className="bg-[#f9fbfc] rounded-[6px] p-3 border border-[#e8eaec] mt-2 space-y-1.5">
+            <div className="bg-[var(--raised)] rounded-[var(--radius-control)] p-3 border border-[var(--border)] space-y-2">
               <div className="flex items-center justify-between text-[12px]">
-                <span className="text-[#5d5f60] flex items-center gap-1.5">
+                <span className="text-[var(--muted)] flex items-center gap-2">
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      audioLevel > 5 ? "bg-[#1e7b4f]" : "bg-[#cdced1]"
+                      audioLevel > 5 ? "bg-[var(--positive)]" : "bg-[var(--control)]"
                     }`}
                   />
-                  Input Signal Check
+                  Input signal check
                 </span>
-                <span className="tabular-nums text-[#131416] font-medium">
+                <span className="font-mono tabular-nums text-[var(--text)] font-medium">
                   {signalStatusLabel(audioLevel)}
                 </span>
               </div>
-              <div className="h-2 w-full bg-[#e8eaec] rounded-[2px] overflow-hidden flex">
+              <div className="h-1.5 w-full bg-[var(--ring-track)] rounded-full overflow-hidden flex">
                 <div
-                  className="h-full bg-[#1b6c80]"
+                  className="h-full bg-[var(--accent)] rounded-full transition-[width] duration-75"
                   style={{ width: `${Math.max(4, audioLevel)}%` }}
                 />
               </div>
             </div>
 
             {onChangeMicGain && (
-              <div className="bg-[#f9fbfc] rounded-[6px] p-3 border border-[#e8eaec] space-y-1.5">
+              <div className="bg-[var(--raised)] rounded-[var(--radius-control)] p-3 border border-[var(--border)] space-y-1.5">
                 <div className="flex items-center justify-between text-[12px]">
-                  <label htmlFor="mic-gain-slider" className="font-medium text-[#131416]">
-                    Mic Sensitivity Boost
+                  <label htmlFor="mic-gain-slider" className="font-medium text-[var(--text)]">
+                    Mic sensitivity boost
                   </label>
-                  <span className="tabular-nums text-[#1b6c80] font-medium">
+                  <span className="font-mono tabular-nums text-[var(--accent-ink)] font-medium">
                     {micGain <= 1.01
                       ? "Normal (1.0×)"
                       : `+${Math.round(20 * Math.log10(micGain))} dB (${micGain.toFixed(2)}×)`}
@@ -306,28 +307,28 @@ export default function DeviceSettingsModal({
                   step={0.25}
                   value={micGain}
                   onChange={(e) => onChangeMicGain(Number(e.target.value))}
-                  className="w-full accent-[#1b6c80] cursor-pointer"
+                  className="w-full accent-[var(--accent)] cursor-pointer"
                 />
-                <p className="text-[11px] text-[#5d5f60]">
-                  Increase if your mic sits further away on your desk.
+                <p className="text-[12px] text-[var(--muted)]">
+                  Increase if your mic sits further away on your desk
                 </p>
               </div>
             )}
 
             {onToggleNoiseSuppression && (
-              <label className="flex items-start gap-2.5 bg-[#f9fbfc] rounded-[6px] p-3 border border-[#e8eaec] cursor-pointer">
+              <label className="flex items-start gap-2.5 bg-[var(--raised)] rounded-[var(--radius-control)] p-3 border border-[var(--border)] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={noiseSuppression}
                   onChange={(e) => onToggleNoiseSuppression(e.target.checked)}
-                  className="mt-0.5 accent-[#1b6c80] cursor-pointer"
+                  className="mt-0.5 accent-[var(--accent)] cursor-pointer"
                 />
                 <span className="space-y-0.5">
-                  <span className="block text-[12px] font-medium text-[#131416]">
-                    Background Noise Suppression
+                  <span className="block text-[13px] font-medium text-[var(--text)]">
+                    Background noise suppression
                   </span>
-                  <span className="block text-[11px] text-[#5d5f60]">
-                    Filters fan &amp; room noise when sitting back. Turn off in a quiet room if soft fillers are missed.
+                  <span className="block text-[12px] text-[var(--muted)]">
+                    Filters fan and room noise. Turn off in a quiet room if soft fillers are missed
                   </span>
                 </span>
               </label>
@@ -335,24 +336,24 @@ export default function DeviceSettingsModal({
           </div>
 
           {/* Privacy Guarantee Notice */}
-          <div className="p-3 rounded-[6px] bg-[#f4f6f8] border border-[#e8eaec] text-[12px] text-[#5d5f60]">
-            <strong className="text-[#131416] font-medium">Client-Side Vision Guarantee:</strong>{" "}
-            MediaPipe FaceLandmarker runs in WebAssembly on your browser GPU. Video frames never leave your machine.
+          <div className="p-3 rounded-[var(--radius-control)] bg-[var(--raised)] border border-[var(--border)] text-[12px] text-[var(--muted)]">
+            <strong className="text-[var(--text)] font-medium">Privacy notice:</strong>{" "}
+            Camera tracking runs locally in your browser. Video frames never leave your device.
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-[#f9fbfc] border-t border-[#e8eaec] flex items-center justify-between">
+        <div className="px-5 py-3 bg-[var(--raised)]/60 border-t border-[var(--border)] flex items-center justify-between">
           {onRefreshDevices ? (
             <button
               type="button"
               onClick={onRefreshDevices}
-              className="flex items-center gap-1.5 text-[12px] text-[#5d5f60] hover:text-[#131416] transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[15px] leading-none">
+              <span className="material-symbols-outlined text-[16px] leading-none">
                 refresh
               </span>
-              <span>Rescan Hardware</span>
+              <span>Rescan devices</span>
             </button>
           ) : (
             <div />
@@ -361,7 +362,7 @@ export default function DeviceSettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="h-[32px] px-4 rounded-[6px] bg-[#131416] text-white font-medium text-[12px] hover:bg-[#25272a] transition-colors cursor-pointer"
+            className="btn-primary h-9 px-4 font-medium text-[13px] cursor-pointer"
           >
             Done
           </button>

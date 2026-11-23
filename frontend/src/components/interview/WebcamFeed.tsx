@@ -13,11 +13,6 @@
  *   This component is a "dumb" media source. It exposes its videoRef
  *   upward so parent components / hooks (like useFaceMesh) can read
  *   frames from the HTMLVideoElement without owning the DOM node.
- *
- * TODO: Add a debug toggle prop that draws face-mesh landmarks on the
- *       canvas overlay in real-time.
- * TODO: Add resolution/FPS constraints for optimal MediaPipe performance
- *       (e.g. 640×480 @ 30 fps is a good balance).
  * =============================================================================
  */
 
@@ -30,7 +25,6 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { VideoOff, Loader2 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface WebcamFeedHandle {
@@ -43,7 +37,7 @@ export interface WebcamFeedHandle {
 interface WebcamFeedProps {
   /** Optional CSS class for the outer container. */
   className?: string;
-  /** When true, draws debug landmarks on the canvas (placeholder). */
+  /** When true, draws debug landmarks on the canvas. */
   showDebugOverlay?: boolean;
   /** Specific camera device ID to stream from */
   deviceId?: string;
@@ -161,12 +155,12 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
           if (err instanceof DOMException && err.name === "NotAllowedError") {
             setStatus("denied");
             setErrorMessage(
-              "Camera access was denied. Please allow camera permissions to use the interview coach."
+              "Camera access was denied. Allow camera permissions in your browser to enable presence tracking"
             );
           } else {
             setStatus("error");
             setErrorMessage(
-              err instanceof Error ? err.message : "Could not access camera."
+              err instanceof Error ? err.message : "Could not access camera"
             );
           }
           console.error("[WebcamFeed] getUserMedia error:", err);
@@ -193,23 +187,20 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
     // ── Render ────────────────────────────────────────────────────────────────
     return (
       <div
-        className={`relative overflow-hidden rounded-[6px] border border-[#e8eaec] bg-[#0f1419] ${className}`}
+        className={`relative overflow-hidden rounded-[var(--radius-control)] border border-[var(--border)] bg-zinc-950 ${className}`}
       >
-        {/* ── Loading State (Dark Studio Surface — prevents harsh white flash) ── */}
+        {/* ── Loading State ── */}
         {(status === "idle" || status === "requesting") && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0f1419] text-white/90 select-none">
-            <div className="relative flex items-center justify-center">
-              <span className="absolute h-12 w-12 rounded-full bg-[#1b6c80]/25 animate-ping" />
-              <div className="relative w-11 h-11 rounded-full bg-white/5 border border-white/15 flex items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-[#4edea3]" />
-              </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-zinc-950 text-white/90 select-none">
+            <div className="w-10 h-10 rounded-full bg-white/5 border border-white/15 flex items-center justify-center">
+              <span className="w-4 h-4 rounded-full border-2 border-white/25 border-t-white animate-spin" />
             </div>
-            <div className="text-center space-y-0.5 px-4">
+            <div className="text-center space-y-1 px-4">
               <p className="text-[13px] font-medium text-white">
                 Starting HD camera…
               </p>
-              <p className="text-[11.5px] text-white/60">
-                Video stays 100% on your device
+              <p className="text-[12px] text-white/60">
+                Video stays on your device
               </p>
             </div>
           </div>
@@ -217,16 +208,18 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
 
         {/* ── Muted State ──────────────────────────────────────────────── */}
         {status === "muted" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#f9fbfc] text-[#131416] p-6 text-center">
-            <div className="w-12 h-12 rounded-[8px] bg-[#eef4f6] flex items-center justify-center border border-[#e8eaec]">
-              <span className="material-symbols-outlined text-[#1b6c80] text-[22px]">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--raised)] text-[var(--text)] p-6 text-center">
+            <div className="w-11 h-11 rounded-[var(--radius-card)] bg-[var(--surface)] flex items-center justify-center border border-[var(--border)]">
+              <span className="material-symbols-outlined text-[var(--muted)] text-[20px]">
                 videocam_off
               </span>
             </div>
             <div>
-              <p className="text-[14px] font-semibold text-[#131416]">Camera is turned off</p>
-              <p className="text-[12px] text-[#5d5f60] mt-1">
-                Click &ldquo;Video Off&rdquo; in the control dock below to re-enable your camera.
+              <p className="text-[14px] font-medium text-[var(--text)]">
+                Camera is turned off
+              </p>
+              <p className="text-[12px] text-[var(--muted)] mt-1">
+                Use the camera button in the dock below to re-enable video
               </p>
             </div>
           </div>
@@ -234,20 +227,21 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
 
         {/* ── Error / Denied State ──────────────────────────────────────── */}
         {(status === "denied" || status === "error") && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center bg-[#f9fbfc]">
-            <VideoOff className="h-8 w-8 text-[#c4242a]" />
-            <p className="text-[13px] text-[#5d5f60] max-w-md">{errorMessage}</p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center bg-[var(--raised)]">
+            <span className="material-symbols-outlined text-[24px] text-[var(--negative)]">
+              videocam_off
+            </span>
+            <p className="text-[13px] text-[var(--muted)] max-w-md">{errorMessage}</p>
           </div>
         )}
 
         {/* ── Live Video Feed ───────────────────────────────────────────── */}
-        {/* Always rendered so the stream can attach; fades in smoothly once active */}
         <video
           ref={videoRef}
           className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ease-out ${
             status === "active" ? "opacity-100" : "opacity-0"
           }`}
-          style={{ transform: "scaleX(-1)" }} // Mirror for natural UX
+          style={{ transform: "scaleX(-1)" }}
           autoPlay
           playsInline
           muted
@@ -259,16 +253,14 @@ const WebcamFeed = forwardRef<WebcamFeedHandle, WebcamFeedProps>(
           className={`absolute inset-0 h-full w-full object-cover pointer-events-none ${
             showDebugOverlay ? "block" : "hidden"
           }`}
-          style={{ transform: "scaleX(-1)" }} // Must match video mirror
+          style={{ transform: "scaleX(-1)" }}
         />
 
         {/* ── Status Indicator ──────────────────────────────────────────── */}
         {status === "active" && (
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-[4px] bg-black/75 border border-white/15 px-2.5 py-1">
-            <span className="inline-flex h-2 w-2 rounded-full bg-[#4edea3]" />
-            <span className="text-[11px] font-medium text-white tracking-tight">
-              LIVE
-            </span>
+          <div className="absolute top-3 left-3 h-7 flex items-center gap-1.5 rounded-[6px] bg-black/75 border border-white/15 px-2.5">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#4cc38a]" />
+            <span className="text-[12px] font-medium text-white">Live</span>
           </div>
         )}
       </div>

@@ -11,6 +11,8 @@ export interface VisualNudgeProps {
   soundEnabled?: boolean;
 }
 
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
+
 function getCueIcon(cue: VisionNudgeCue): string {
   if (cue.phase === "resolved") return "check_circle";
   const map: Record<VisionNudgeCode, string> = {
@@ -28,26 +30,26 @@ function getCueIcon(cue: VisionNudgeCue): string {
 
 function getBannerStyle(cue: VisionNudgeCue): string {
   if (cue.phase === "resolved") {
-    return "bg-[#064e3b]/95 border-[#6ee7b7]/75 text-white";
+    return "bg-zinc-950/90 border-[#4cc38a]/70 text-white";
   }
   if (cue.kind === "eye") {
-    return "bg-[#7f1d1d]/95 border-[#fca5a5]/75 text-white";
+    return "bg-zinc-950/90 border-[#e5484d]/75 text-white";
   }
-  return "bg-[#78350f]/95 border-[#fcd34d]/75 text-white";
+  return "bg-zinc-950/90 border-amber-400/75 text-white";
 }
 
 function getIconBadgeStyle(cue: VisionNudgeCue): string {
   if (cue.phase === "resolved") {
-    return "bg-[#10b981]/25 text-[#6ee7b7]";
+    return "bg-[#4cc38a]/20 text-[#72d6a6]";
   }
   if (cue.kind === "eye") {
-    return "bg-[#ef4444]/30 text-[#fecaca]";
+    return "bg-[#e5484d]/20 text-[#f28588]";
   }
-  return "bg-[#f59e0b]/30 text-[#fde68a]";
+  return "bg-amber-400/20 text-amber-300";
 }
 
 /**
- * Top-center camera-anchored visual nudge system + peripheral pulsing edge glow
+ * Top-center camera-anchored visual nudge system + peripheral edge indicator
  * + optional earphone chime for Module 4 (Eye Contact & Posture).
  */
 export default function VisualNudge({
@@ -108,39 +110,28 @@ export default function VisualNudge({
     (c): c is VisionNudgeCue => c !== null
   );
 
+  const edgeColorClass = activeEye
+    ? "border-[#e5484d]"
+    : activePosture
+      ? "border-amber-400"
+      : "border-[#4cc38a]";
+
   return (
     <>
-      {/* 1. Peripheral Pulsing Edge Glow (caught in peripheral vision without looking down) */}
+      {/* 1. Crisp 2px peripheral edge indicator (animates opacity only) */}
       {(activeEye || activePosture || hasResolvedOnly) && (
         <motion.div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-10 rounded-[8px]"
+          className={`pointer-events-none absolute inset-0 z-10 rounded-[var(--radius-card)] border-2 ${edgeColorClass}`}
           animate={
-            activeEye
-              ? {
-                  boxShadow: [
-                    "inset 0 0 0 2px rgba(239,68,68,0.65), inset 0 0 24px rgba(239,68,68,0.22)",
-                    "inset 0 0 0 4px rgba(239,68,68,0.95), inset 0 0 42px rgba(239,68,68,0.42)",
-                    "inset 0 0 0 2px rgba(239,68,68,0.65), inset 0 0 24px rgba(239,68,68,0.22)",
-                  ],
-                }
-              : activePosture
-              ? {
-                  boxShadow: [
-                    "inset 0 0 0 2px rgba(245,158,11,0.6), inset 0 0 22px rgba(245,158,11,0.2)",
-                    "inset 0 0 0 4px rgba(245,158,11,0.9), inset 0 0 38px rgba(245,158,11,0.38)",
-                    "inset 0 0 0 2px rgba(245,158,11,0.6), inset 0 0 22px rgba(245,158,11,0.2)",
-                  ],
-                }
-              : {
-                  boxShadow:
-                    "inset 0 0 0 2.5px rgba(78,222,163,0.75), inset 0 0 22px rgba(78,222,163,0.2)",
-                }
+            activeEye || activePosture
+              ? { opacity: [0.5, 1, 0.5] }
+              : { opacity: 0.85 }
           }
           transition={
             activeEye || activePosture
               ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
-              : { duration: 0.25 }
+              : { duration: 0.2, ease: EASE_OUT }
           }
         />
       )}
@@ -150,14 +141,14 @@ export default function VisualNudge({
         {activeEye && (
           <motion.div
             key="camera-anchor-dot"
-            initial={{ opacity: 0, scale: 0.6 }}
+            initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.6 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ duration: 0.16, ease: EASE_OUT }}
             aria-hidden="true"
-            className="pointer-events-none absolute top-1.5 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center"
+            className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center justify-center"
           >
-            <span className="absolute h-4 w-4 rounded-full bg-[#ef4444]/60 animate-ping" />
-            <span className="relative h-2.5 w-2.5 rounded-full bg-[#ef4444] ring-2 ring-white shadow-sm" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#e5484d] ring-2 ring-white" />
           </motion.div>
         )}
       </AnimatePresence>
@@ -169,11 +160,11 @@ export default function VisualNudge({
             <motion.div
               key={`${cue.kind}-${cue.phase}`}
               layout
-              initial={{ opacity: 0, y: -12, scale: 0.94 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 420, damping: 28 }}
-              className={`flex items-center gap-2.5 rounded-[8px] border px-3.5 py-2 shadow-lg backdrop-blur-sm ${getBannerStyle(
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: EASE_OUT }}
+              className={`flex items-center gap-2.5 rounded-[8px] border px-3.5 py-2 shadow-lg ${getBannerStyle(
                 cue
               )}`}
             >
@@ -188,10 +179,10 @@ export default function VisualNudge({
               </span>
 
               <div className="flex flex-col leading-tight">
-                <span className="text-[14px] font-semibold tracking-tight">
+                <span className="text-[14px] font-medium">
                   {cue.action}
                 </span>
-                <span className="text-[11.5px] text-white/85">
+                <span className="text-[12px] text-white/80">
                   {cue.detail}
                 </span>
               </div>

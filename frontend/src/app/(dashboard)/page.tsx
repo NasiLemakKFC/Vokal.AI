@@ -1,33 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { SESSIONS, STAR_LABELS, type PracticeSession, type StarPillar } from "@/lib/mockSessions";
+import { AnimatePresence, motion } from "framer-motion";
+import { useSessions } from "@/hooks/useSessions";
 import {
-  EMPTY_SESSIONS,
   computeAnswerMetrics,
   computeSessionMetrics,
-  getSessionsSnapshot,
-  subscribeSessions,
   type SavedSession,
 } from "@/lib/nlp/sessionStore";
-import type { StarKey } from "@/lib/nlp/types";
+import { STAR_LABELS, type StarKey, type StarPillar } from "@/lib/nlp/types";
 import { prewarmVisionFileset } from "@/lib/vision/MediaPipeSetup";
+import ScoreRing from "@/components/ui/ScoreRing";
+
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
 function scoreTone(score: number) {
-  return score >= 80 ? "text-[#1e7b4f]" : score >= 70 ? "text-[#92400e]" : "text-[#c4242a]";
+  return score >= 80
+    ? "text-[var(--positive)]"
+    : score >= 70
+      ? "text-[var(--warning-ink)]"
+      : "text-[var(--negative)]";
+}
+
+function stripTrailingPeriod(text: string): string {
+  return text.trim().replace(/\.+$/, "");
 }
 
 interface UnifiedHomeSession {
   id: string;
-  isSaved: boolean;
   question: string;
   roleLabel: string;
   dateLabel: string;
   answerCount: number;
   overall: number;
   starScore: number;
-  eyeContact: number;
+  eyeContact: number | null;
   fillersPerMin: number;
   star: Record<StarKey, StarPillar>;
   topImprovement: string;
@@ -49,7 +57,8 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
   const avgPillar = (key: StarKey): number => {
     if (perAnswer.length === 0) return 0;
     return Math.round(
-      perAnswer.reduce((sum, a) => sum + a.starPillarScores[key], 0) / perAnswer.length
+      perAnswer.reduce((sum, a) => sum + a.starPillarScores[key], 0) /
+        perAnswer.length
     );
   };
 
@@ -60,28 +69,28 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
       note:
         firstAns?.analysis.star.situation.suggestion ||
         firstAns?.analysis.star.situation.explanation ||
-        "Clarify the project context and constraints.",
+        "Clarify the project context and constraints",
     },
     task: {
       score: avgPillar("task"),
       note:
         firstAns?.analysis.star.task.suggestion ||
         firstAns?.analysis.star.task.explanation ||
-        "State your specific responsibility and success goal.",
+        "State your specific responsibility and success goal",
     },
     action: {
       score: avgPillar("action"),
       note:
         firstAns?.analysis.star.action.suggestion ||
         firstAns?.analysis.star.action.explanation ||
-        "Detail the concrete engineering decisions you took.",
+        "Detail the concrete engineering decisions you took",
     },
     result: {
       score: avgPillar("result"),
       note:
         firstAns?.analysis.star.result.suggestion ||
         firstAns?.analysis.star.result.explanation ||
-        "Quantify the final outcome with a concrete number or percentage.",
+        "Quantify the final outcome with a concrete number or percentage",
     },
   };
 
@@ -89,8 +98,10 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
   const fillersPerMin =
     speechAnswers.length > 0
       ? +(
-          speechAnswers.reduce((sum, a) => sum + (a.speech?.fillersPerMin ?? 0), 0) /
-          speechAnswers.length
+          speechAnswers.reduce(
+            (sum, a) => sum + (a.speech?.fillersPerMin ?? 0),
+            0
+          ) / speechAnswers.length
         ).toFixed(1)
       : 0;
 
@@ -103,49 +114,26 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
 
   const topImprovement =
     firstAns?.analysis.coaching[0] ||
-    "Finish your STAR response with a measurable outcome.";
+    "Finish your STAR response with a measurable outcome";
 
   return {
     id: s.id,
-    isSaved: true,
     question: firstAns?.question || "Practice session",
     roleLabel,
     dateLabel: formatSavedDate(s.completedAt),
     answerCount: s.answers.length,
     overall: s.overallScore ?? metrics.overallScore,
     starScore: s.starScore ?? metrics.starScore,
-    eyeContact: metrics.avgEyeContact ?? 85,
+    eyeContact: metrics.avgEyeContact,
     fillersPerMin,
     star,
     topImprovement,
   };
 }
 
-function mapSampleToUnified(s: PracticeSession): UnifiedHomeSession {
-  return {
-    id: s.id,
-    isSaved: false,
-    question: s.question,
-    roleLabel: s.role,
-    dateLabel: s.date,
-    answerCount: 1,
-    overall: s.overall,
-    starScore: s.starScore,
-    eyeContact: s.eyeContact,
-    fillersPerMin: s.fillersPerMin,
-    star: s.star,
-    topImprovement: s.improvements[0] ?? "Quantify the final result with concrete metrics.",
-  };
-}
-
 export default function Home() {
   const [openId, setOpenId] = useState<string | null>(null);
-
-  const savedSessions = useSyncExternalStore(
-    subscribeSessions,
-    getSessionsSnapshot,
-    () => EMPTY_SESSIONS
-  );
+  const { sessions: savedSessions, loading, error, reload } = useSessions();
 
   // Pre-warm MediaPipe WASM fileset & model cache during idle time on Home
   useEffect(() => {
@@ -155,192 +143,343 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const unifiedSessions = useMemo<UnifiedHomeSession[]>(() => {
-    const saved = savedSessions.map(mapSavedToUnified);
-    const samples = SESSIONS.map(mapSampleToUnified);
-    return saved.length > 0 ? [...saved, ...samples.slice(0, Math.max(0, 3 - saved.length))] : samples;
-  }, [savedSessions]);
+  const unifiedSessions = useMemo<UnifiedHomeSession[]>(
+    () => savedSessions.map(mapSavedToUnified),
+    [savedSessions]
+  );
+
+  if (loading) {
+    return (
+      <div className="max-w-[1200px] mx-auto">
+        <div className="card py-12 text-center text-[14px] text-[var(--muted)]">
+          Loading your practice sessions…
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-[1200px] mx-auto">
+        <div className="card space-y-3">
+          <p className="text-[14px] font-medium text-[var(--negative)]">
+            Could not load practice sessions
+          </p>
+          <p className="text-[13px] text-[var(--muted)]">{error}</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="btn-secondary h-9 px-4 text-[13px] font-medium cursor-pointer"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (unifiedSessions.length === 0) {
+    return (
+      <div className="max-w-[1200px] mx-auto space-y-6">
+        <motion.section
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+          className="card !p-6 sm:!p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6"
+        >
+          <div className="space-y-2 max-w-[540px]">
+            <h1 className="text-[24px] font-medium text-[var(--text)]">
+              Practice overview
+            </h1>
+            <p className="text-[14px] text-[var(--muted)] leading-relaxed">
+              No practice sessions recorded yet. Complete your first mock
+              interview to track your STAR structure, eye contact, posture, and
+              speech pacing over time.
+            </p>
+          </div>
+
+          <Link
+            href="/interview"
+            onMouseEnter={() => void prewarmVisionFileset()}
+            className="btn-primary h-10 px-4 text-[14px] font-medium flex items-center justify-center gap-2 shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              play_arrow
+            </span>
+            Start your first practice
+          </Link>
+        </motion.section>
+      </div>
+    );
+  }
 
   const last = unifiedSessions[0];
-  const prev = unifiedSessions[1] ?? unifiedSessions[0];
-  const hasUserSessions = savedSessions.length > 0;
+  const prev = unifiedSessions[1] ?? null;
 
   const weakest = STAR_LABELS.reduce((min, cur) =>
     last.star[cur[0]].score < last.star[min[0]].score ? cur : min
   );
 
-  const figures = [
-    {
-      label: "STAR score",
-      value: `${last.starScore}%`,
-      delta: last.starScore - prev.starScore,
-      higherIsBetter: true,
-    },
-    {
-      label: "Eye contact",
-      value: `${last.eyeContact}%`,
-      delta: last.eyeContact - prev.eyeContact,
-      higherIsBetter: true,
-    },
-    {
-      label: "Fillers per minute",
-      value: last.fillersPerMin.toFixed(1),
-      delta: +(last.fillersPerMin - prev.fillersPerMin).toFixed(1),
-      higherIsBetter: false,
-    },
-  ];
+  const starDelta = prev ? last.starScore - prev.starScore : null;
+  const eyeDelta =
+    prev && last.eyeContact !== null && prev.eyeContact !== null
+      ? last.eyeContact - prev.eyeContact
+      : null;
+  const fillerDelta = prev
+    ? +(last.fillersPerMin - prev.fillersPerMin).toFixed(1)
+    : null;
 
   return (
-    <div className="max-w-[880px] mx-auto space-y-6">
-      {/* Title + one finding + main action */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-[22px] font-semibold text-[#131416] tracking-tight">
-              Welcome back, Amirul
-            </h1>
-            {hasUserSessions && (
-              <span className="pill-positive">
-                {savedSessions.length} completed{" "}
-                {savedSessions.length === 1 ? "session" : "sessions"}
+    <div className="max-w-[1200px] mx-auto space-y-6">
+      {/* Hero Summary Card */}
+      <motion.section
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
+        className="card !p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6"
+      >
+        <div className="flex items-center gap-4 min-w-0">
+          <ScoreRing value={last.overall} size={72} strokeWidth={5} label="Last" />
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-baseline gap-3">
+              <h1 className="text-[24px] font-medium text-[var(--text)]">
+                Practice overview
+              </h1>
+              <span className="text-[12px] font-mono tabular-nums text-[var(--muted)]">
+                {savedSessions.length}{" "}
+                {savedSessions.length === 1 ? "session" : "sessions"} recorded · Latest{" "}
+                {last.dateLabel}
               </span>
-            )}
+            </div>
+            <p className="text-[14px] text-[var(--muted)] leading-relaxed">
+              Focus next on your{" "}
+              <span className="font-medium text-[var(--text)]">
+                {weakest[1]}
+              </span>{" "}
+              — {stripTrailingPeriod(last.star[weakest[0]].note).toLowerCase()}
+            </p>
           </div>
-          <p className="text-[14px] text-[#5d5f60]">
-            Last session scored{" "}
-            <span className="font-medium text-[#131416] tabular-nums">{last.overall}%</span>. Work
-            on your <span className="font-medium text-[#131416]">{weakest[1]}</span> —{" "}
-            {last.star[weakest[0]].note.toLowerCase()}
-          </p>
         </div>
+
         <Link
           href="/interview"
           onMouseEnter={() => void prewarmVisionFileset()}
-          className="h-[36px] px-4 rounded-[6px] bg-[#1b6c80] text-white text-[13px] font-medium hover:bg-[#134e5e] transition-colors flex items-center gap-1.5 shrink-0"
+          className="btn-primary h-10 px-4 text-[14px] font-medium flex items-center justify-center gap-2 shrink-0"
         >
-          <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+          <span className="material-symbols-outlined text-[18px]">
+            play_arrow
+          </span>
           Start practice
         </Link>
-      </div>
+      </motion.section>
 
-      {/* Three figures from the latest session */}
-      <section className="rounded-[8px] border border-[#e8eaec] grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#e8eaec]">
-        {figures.map((f) => {
-          const good = f.higherIsBetter ? f.delta >= 0 : f.delta <= 0;
-          return (
-            <div key={f.label} className="p-4">
-              <div className="text-[13px] text-[#5d5f60]">{f.label}</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="text-[26px] text-[#131416] tabular-nums leading-tight">
-                  {f.value}
-                </span>
-                <span
-                  className={`text-[12px] tabular-nums ${
-                    good ? "text-[#1e7b4f]" : "text-[#c4242a]"
-                  }`}
-                >
-                  {f.delta > 0 ? "+" : ""}
-                  {f.delta}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+      {/* Three Clean KPI Cards (Numbers Only) */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="kpi-card p-5 flex flex-col justify-between gap-3">
+          <span className="text-[13px] text-[var(--muted)]">STAR score</span>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[28px] font-medium text-[var(--text)] tabular-nums leading-none">
+              {last.starScore}%
+            </span>
+            {starDelta !== null && (
+              <span
+                className={`text-[12px] font-medium tabular-nums ${
+                  starDelta >= 0
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--negative)]"
+                }`}
+              >
+                {starDelta > 0 ? "+" : ""}
+                {starDelta}%
+              </span>
+            )}
+          </div>
+          <span className="text-[12px] text-[var(--muted)]">
+            {prev ? "vs previous session" : "First session"}
+          </span>
+        </div>
+
+        <div className="kpi-card p-5 flex flex-col justify-between gap-3">
+          <span className="text-[13px] text-[var(--muted)]">Eye contact</span>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[28px] font-medium text-[var(--text)] tabular-nums leading-none">
+              {last.eyeContact !== null ? `${last.eyeContact}%` : "—"}
+            </span>
+            {eyeDelta !== null && (
+              <span
+                className={`text-[12px] font-medium tabular-nums ${
+                  eyeDelta >= 0
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--negative)]"
+                }`}
+              >
+                {eyeDelta > 0 ? "+" : ""}
+                {eyeDelta}%
+              </span>
+            )}
+          </div>
+          <span className="text-[12px] text-[var(--muted)]">
+            {last.eyeContact !== null ? "Camera presence" : "Camera off"}
+          </span>
+        </div>
+
+        <div className="kpi-card p-5 flex flex-col justify-between gap-3">
+          <span className="text-[13px] text-[var(--muted)]">Fillers per min</span>
+          <div className="flex items-baseline gap-2.5">
+            <span className="text-[28px] font-medium text-[var(--text)] tabular-nums leading-none">
+              {last.fillersPerMin.toFixed(1)}
+            </span>
+            {fillerDelta !== null && (
+              <span
+                className={`text-[12px] font-medium tabular-nums ${
+                  fillerDelta <= 0
+                    ? "text-[var(--positive)]"
+                    : "text-[var(--negative)]"
+                }`}
+              >
+                {fillerDelta > 0 ? "+" : ""}
+                {fillerDelta}
+              </span>
+            )}
+          </div>
+          <span className="text-[12px] text-[var(--muted)]">
+            {last.fillersPerMin <= 2 ? "Clean pacing" : "Above 2.0 target"}
+          </span>
+        </div>
       </section>
 
       {/* Recent sessions */}
-      <section className="rounded-[8px] border border-[#e8eaec]">
-        <div className="px-4 h-[48px] flex items-center justify-between border-b border-[#e8eaec]">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[15px] font-semibold text-[#131416]">Recent sessions</h2>
-            {!hasUserSessions && (
-              <span className="badge">Sample preview</span>
-            )}
-          </div>
-          <Link href="/reports" className="text-[13px] font-medium text-[#1b6c80] hover:underline">
+      <section className="card !p-0 overflow-hidden">
+        <div className="px-5 h-12 flex items-center justify-between border-b border-[var(--border)] bg-[var(--raised)]/50">
+          <h2 className="text-[15px] font-medium text-[var(--text)]">
+            Recent sessions
+          </h2>
+          <Link
+            href="/reports"
+            className="text-[13px] font-medium text-[var(--accent-ink)] hover:text-[var(--accent)] flex items-center gap-1 transition-colors"
+          >
             All reports
+            <span className="material-symbols-outlined text-[16px]">
+              chevron_right
+            </span>
           </Link>
         </div>
 
-        <ul className="divide-y divide-[#f0f1f2]">
+        <ul className="divide-y divide-[var(--rule)]">
           {unifiedSessions.map((s) => {
             const isOpen = openId === s.id;
             return (
-              <li key={s.id}>
-                <div className="px-4 py-3 flex items-center gap-3 sm:gap-4">
+              <li
+                key={s.id}
+                className="transition-colors hover:bg-[var(--raised)]/40"
+              >
+                <div className="px-5 py-3.5 flex items-center gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <div className="text-[14px] font-medium text-[#131416] truncate">
+                      <div className="text-[14px] font-medium text-[var(--text)] truncate">
                         {s.question}
                       </div>
-                      {s.isSaved ? (
-                        <span className="pill-positive shrink-0">
-                          {s.answerCount > 1 ? `${s.answerCount}Q` : "Saved"}
+                      {s.answerCount > 1 && (
+                        <span className="text-[12px] font-mono tabular-nums text-[var(--muted)] shrink-0">
+                          {s.answerCount}Q
                         </span>
-                      ) : (
-                        hasUserSessions && (
-                          <span className="badge shrink-0">Sample</span>
-                        )
                       )}
                     </div>
-                    <div className="text-[12px] text-[#5d5f60]">
+                    <div className="text-[12px] text-[var(--muted)] mt-0.5">
                       {s.roleLabel} · {s.dateLabel}
                     </div>
                   </div>
-                  <span className={`text-[15px] font-medium tabular-nums ${scoreTone(s.overall)}`}>
+
+                  <span
+                    className={`w-12 text-right text-[15px] font-medium font-mono tabular-nums shrink-0 ${scoreTone(s.overall)}`}
+                  >
                     {s.overall}%
                   </span>
-                  <div className="flex items-center gap-1.5">
+
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={() => setOpenId(isOpen ? null : s.id)}
                       aria-expanded={isOpen}
-                      className="h-[30px] px-2.5 rounded-[6px] border border-[#cdced1] bg-white hover:bg-[#f4f6f8] text-[12px] font-medium text-[#131416] flex items-center gap-0.5 cursor-pointer"
+                      className={`h-8 px-3 rounded-[var(--radius-control)] border text-[12px] font-medium flex items-center gap-1 cursor-pointer transition-colors ${
+                        isOpen
+                          ? "border-[var(--border-accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]"
+                          : "border-[var(--control)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--text)]"
+                      }`}
                     >
                       STAR
-                      <span className="material-symbols-outlined text-[16px]">
-                        {isOpen ? "expand_less" : "expand_more"}
-                      </span>
+                      <motion.span
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ duration: 0.16, ease: EASE_OUT }}
+                        className="material-symbols-outlined text-[16px]"
+                      >
+                        expand_more
+                      </motion.span>
                     </button>
                     <Link
                       href={`/reports?session=${encodeURIComponent(s.id)}`}
                       title="Open full session report"
-                      className="h-[30px] px-2.5 rounded-[6px] border border-[#e8eaec] bg-[#f9fbfc] hover:bg-[#eef4f6] text-[12px] font-medium text-[#1b6c80] flex items-center gap-0.5"
+                      className="h-8 px-3 rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--raised)] hover:bg-[var(--accent-soft)] hover:border-[var(--border-accent)] text-[12px] font-medium text-[var(--accent-ink)] flex items-center gap-1 transition-colors"
                     >
                       Report
-                      <span className="material-symbols-outlined text-[14px]">arrow_outward</span>
+                      <span className="material-symbols-outlined text-[16px]">
+                        arrow_outward
+                      </span>
                     </Link>
                   </div>
                 </div>
 
-                {isOpen && (
-                  <div className="px-4 pb-4 space-y-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {STAR_LABELS.map(([key, label]) => {
-                        const p = s.star[key];
-                        return (
-                          <div key={key} className="space-y-1.5">
-                            <div className="flex justify-between text-[12px]">
-                              <span className="text-[#131416]">{label}</span>
-                              <span className={`tabular-nums font-medium ${scoreTone(p.score)}`}>
-                                {p.score}%
-                              </span>
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.18, ease: EASE_OUT }}
+                      className="px-5 pb-4 pt-3 space-y-3 border-t border-[var(--rule)] bg-[var(--raised)]/30"
+                    >
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {STAR_LABELS.map(([key, label]) => {
+                          const p = s.star[key];
+                          return (
+                            <div key={key} className="space-y-1.5">
+                              <div className="flex justify-between text-[12px]">
+                                <span className="font-medium text-[var(--text)]">
+                                  {label}
+                                </span>
+                                <span
+                                  className={`tabular-nums font-medium ${scoreTone(p.score)}`}
+                                >
+                                  {p.score}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-[var(--ring-track)] rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{
+                                    width: `${p.score}%`,
+                                    backgroundColor:
+                                      p.score >= 80
+                                        ? "var(--accent)"
+                                        : p.score >= 70
+                                          ? "var(--warning-ink)"
+                                          : "var(--negative)",
+                                  }}
+                                />
+                              </div>
                             </div>
-                            <div className="h-1.5 bg-[#f0f1f2] rounded-[2px] overflow-hidden">
-                              <div
-                                className={`h-full ${
-                                  p.score >= 80 ? "bg-[#1b6c80]" : "bg-[#c4242a]"
-                                }`}
-                                style={{ width: `${p.score}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[13px] text-[#45474a]">{s.topImprovement}</p>
-                  </div>
-                )}
+                          );
+                        })}
+                      </div>
+                      <p className="text-[13px] text-[var(--text-secondary)]">
+                        <span className="font-medium text-[var(--text)]">
+                          Next focus:{" "}
+                        </span>
+                        {stripTrailingPeriod(s.topImprovement)}
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </li>
             );
           })}

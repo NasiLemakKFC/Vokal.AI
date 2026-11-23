@@ -1,6 +1,5 @@
 /**
  * Client for the speech backend (Module 2: transcript, Module 5: speech metrics).
- * `ui` already matches the field names of PracticeSession in mockSessions.ts.
  */
 
 export interface SpeechUi {
