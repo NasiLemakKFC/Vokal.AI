@@ -57,6 +57,10 @@ export interface VisionCoachConfig {
   nudgeMinHoldMs: number;
   /** Duration (ms) to show the green "Fixed!" confirmation after correcting. */
   nudgeResolvedDisplayMs: number;
+  /** Grace period (ms) at recording start so reading the prompt doesn't penalize eye contact. */
+  sessionStartGraceMs: number;
+  /** Bucket interval (seconds) for presence timeline snapshots in Module 6 reports. */
+  timelineBucketSec: number;
 }
 
 export const DEFAULT_VISION_CONFIG: VisionCoachConfig = {
@@ -77,6 +81,8 @@ export const DEFAULT_VISION_CONFIG: VisionCoachConfig = {
   autoCalibrateDurationMs: 1500,
   nudgeMinHoldMs: 800,
   nudgeResolvedDisplayMs: 1300,
+  sessionStartGraceMs: 3000,
+  timelineBucketSec: 5,
 };
 
 // ─── MediaPipe Landmark Indices ──────────────────────────────────────────────
@@ -112,12 +118,19 @@ export interface VisionDebugMetrics {
   isBlinking: boolean;
 }
 
+export interface VisionTimelineBucket {
+  sec: number;
+  eyeContact: number;
+  posture: number;
+}
+
 export interface VisionSessionSummary {
   postureScore: number;
   eyeContactScore: number;
   postureNudges: number;
   eyeNudges: number;
   totalFrames: number;
+  timeline?: VisionTimelineBucket[];
 }
 
 export type VisionNudgeKind = "eye" | "posture";
@@ -265,6 +278,7 @@ export class VisionCoachAnalyzer {
   }[] = [];
 
   // Cumulative session metrics for Module 6 Dashboard / Reports
+  private sessionStartMs: number | null = null;
   private totalFrames = 0;
   private goodPostureFrames = 0;
   private goodEyeFrames = 0;
@@ -272,6 +286,10 @@ export class VisionCoachAnalyzer {
   private eyeNudgeCount = 0;
   private postureNudgedFlag = false;
   private eyeNudgedFlag = false;
+  private timelineBuckets: Map<
+    number,
+    { total: number; eyeOk: number; postureOk: number }
+  > = new Map();
 
   // FPS tracking
   private prevTimeMs = 0;
@@ -350,11 +368,13 @@ export class VisionCoachAnalyzer {
 
   /** Resets cumulative session counters and nudge timers (keeps calibration). */
   public resetSession(): void {
+    this.sessionStartMs = null;
     this.totalFrames = 0;
     this.goodPostureFrames = 0;
     this.goodEyeFrames = 0;
     this.postureNudgeCount = 0;
     this.eyeNudgeCount = 0;
+    this.timelineBuckets.clear();
     this.clearLiveState();
   }
 
@@ -855,8 +875,15 @@ export class VisionCoachAnalyzer {
 
     const delayMs = this.config.nudgeDelaySec * 1000;
     if (trackSession) {
+      if (this.sessionStartMs === null) {
+        this.sessionStartMs = nowMs;
+      }
       this.totalFrames += 1;
     }
+    const inStartGrace =
+      trackSession &&
+      this.sessionStartMs !== null &&
+      nowMs - this.sessionStartMs < this.config.sessionStartGraceMs;
 
     // --- 1. Posture Evaluation ---
     let postureOk = true;
@@ -933,7 +960,7 @@ export class VisionCoachAnalyzer {
         this.lastEyeOk = eyeOk;
       }
 
-      if (eyeOk) {
+      if (eyeOk || inStartGrace) {
         if (trackSession) this.goodEyeFrames += 1;
         this.badEyeStartMs = null;
         this.eyeNudgedFlag = false;
@@ -949,9 +976,13 @@ export class VisionCoachAnalyzer {
         }
       }
     } else {
-      eyeOk = false;
-      this.lastEyeOk = false;
-      if (this.badEyeStartMs === null) {
+      eyeOk = inStartGrace;
+      this.lastEyeOk = inStartGrace;
+      if (inStartGrace) {
+        if (trackSession) this.goodEyeFrames += 1;
+        this.badEyeStartMs = null;
+        this.eyeNudgedFlag = false;
+      } else if (this.badEyeStartMs === null) {
         this.badEyeStartMs = nowMs;
       } else if (nowMs - this.badEyeStartMs >= delayMs) {
         debouncedEyeIssue = {
@@ -964,6 +995,24 @@ export class VisionCoachAnalyzer {
           this.eyeNudgedFlag = true;
         }
       }
+    }
+
+    // Record 5-second timeline bucket for post-session presence breakdown
+    if (trackSession && this.sessionStartMs !== null) {
+      const elapsedSec = Math.max(0, (nowMs - this.sessionStartMs) / 1000);
+      const bucketIdx = Math.min(
+        59,
+        Math.floor(elapsedSec / Math.max(1, this.config.timelineBucketSec))
+      );
+      const bucket = this.timelineBuckets.get(bucketIdx) ?? {
+        total: 0,
+        eyeOk: 0,
+        postureOk: 0,
+      };
+      bucket.total += 1;
+      if (eyeOk || inStartGrace) bucket.eyeOk += 1;
+      if (postureOk) bucket.postureOk += 1;
+      this.timelineBuckets.set(bucketIdx, bucket);
     }
 
     const eyeNudgeCue = this.updateNudgeBanner(
@@ -1058,6 +1107,16 @@ export class VisionCoachAnalyzer {
       };
     }
 
+    const timeline: VisionTimelineBucket[] = [...this.timelineBuckets.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([bucketIdx, stats]) => ({
+        sec: bucketIdx * this.config.timelineBucketSec,
+        eyeContact:
+          stats.total > 0 ? Math.round((stats.eyeOk / stats.total) * 100) : 100,
+        posture:
+          stats.total > 0 ? Math.round((stats.postureOk / stats.total) * 100) : 100,
+      }));
+
     return {
       postureScore:
         Math.round((this.goodPostureFrames / this.totalFrames) * 1000) / 10,
@@ -1066,6 +1125,7 @@ export class VisionCoachAnalyzer {
       postureNudges: this.postureNudgeCount,
       eyeNudges: this.eyeNudgeCount,
       totalFrames: this.totalFrames,
+      timeline,
     };
   }
 }

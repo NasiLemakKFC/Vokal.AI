@@ -102,14 +102,18 @@ def preprocess_audio(in_path: str) -> str:
         if matches:
             ffmpeg = matches[0]
     if ffmpeg:
-        result = subprocess.run(
-            [
-                ffmpeg, "-loglevel", "error", "-y", "-i", in_path,
-                "-af", "highpass=f=80",
-                "-ar", str(CONFIG["sample_rate"]), "-ac", "1", out_path,
-            ],
-            capture_output=True, text=True,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    ffmpeg, "-loglevel", "error", "-y", "-i", in_path,
+                    "-af", "highpass=f=80",
+                    "-ar", str(CONFIG["sample_rate"]), "-ac", "1", out_path,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired as e:
+            Path(out_path).unlink(missing_ok=True)
+            raise RuntimeError("Audio conversion timed out. Please try a shorter or valid audio recording.") from e
         if result.returncode != 0:
             Path(out_path).unlink(missing_ok=True)
             raise RuntimeError("ffmpeg could not read the audio file. "
@@ -131,10 +135,8 @@ def preprocess_audio(in_path: str) -> str:
     return out_path
 
 
-def prepare_audio_for_whisper(wav_path: str) -> str:
-    """Boost quiet/distant microphone recordings to a clean target speech level for Whisper,
-    leaving dead silence and already-loud close-mic clips untouched.
-    Kept separate from preprocess_audio so detect_pauses_audio runs on the un-boosted WAV."""
+def _load_mono_rms(wav_path: str):
+    """Read a 16 kHz WAV as mono float32 and compute frame RMS once."""
     import librosa
     import numpy as np
     import soundfile as sf
@@ -142,10 +144,25 @@ def prepare_audio_for_whisper(wav_path: str) -> str:
     audio, sr = sf.read(wav_path, dtype="float32")
     if audio.ndim > 1:
         audio = np.mean(audio, axis=1)
+    rms = (
+        librosa.feature.rms(y=audio, frame_length=1024, hop_length=256)[0]
+        if len(audio) > 0
+        else np.array([], dtype=np.float32)
+    )
+    return audio, sr, rms
+
+
+def prepare_audio_for_whisper(wav_path: str, precomputed=None) -> str:
+    """Boost quiet/distant microphone recordings to a clean target speech level for Whisper,
+    leaving dead silence and already-loud close-mic clips untouched.
+    Kept separate from preprocess_audio so detect_pauses_audio runs on the un-boosted WAV."""
+    import numpy as np
+    import soundfile as sf
+
+    audio, sr, rms = precomputed if precomputed is not None else _load_mono_rms(wav_path)
     if len(audio) == 0:
         return wav_path
 
-    rms = librosa.feature.rms(y=audio, frame_length=1024, hop_length=256)[0]
     rms_p95 = float(np.percentile(rms, 95)) if len(rms) > 0 else float(np.sqrt(np.mean(audio ** 2)))
 
     # Leave dead silence and already-loud close-mic audio untouched.
@@ -394,7 +411,7 @@ def detect_pauses(words: list) -> dict:
     }
 
 
-def detect_pauses_audio(wav_path: str, words: list = None) -> dict:
+def detect_pauses_audio(wav_path: str, words: list = None, precomputed=None) -> dict:
     """
     Find long pauses directly from the audio signal (silence detection).
     This does not depend on Whisper timestamps, so it is more reliable.
@@ -404,11 +421,20 @@ def detect_pauses_audio(wav_path: str, words: list = None) -> dict:
 
     sr = CONFIG["sample_rate"]
     hop = 256                                   # 16 ms per frame at 16 kHz
-    audio, _ = librosa.load(wav_path, sr=sr, mono=True)
+    if precomputed is not None:
+        audio, pre_sr, rms = precomputed
+        if pre_sr != sr:
+            audio, _ = librosa.load(wav_path, sr=sr, mono=True)
+            rms = librosa.feature.rms(y=audio, frame_length=1024, hop_length=hop)[0]
+    else:
+        audio, _ = librosa.load(wav_path, sr=sr, mono=True)
+        rms = (
+            librosa.feature.rms(y=audio, frame_length=1024, hop_length=hop)[0]
+            if len(audio) >= sr
+            else np.array([], dtype=np.float32)
+        )
     if len(audio) < sr:                         # shorter than 1 second
         return detect_pauses(words or [])
-
-    rms = librosa.feature.rms(y=audio, frame_length=1024, hop_length=hop)[0]
     db = 20 * np.log10(np.maximum(rms, 1e-8))
     noise_db = np.percentile(db, 10)
     speech_db = np.percentile(db, 95)
@@ -525,9 +551,10 @@ def analyze_audio(audio_path: str, language=_USE_DEFAULT) -> dict:
     wav = preprocess_audio(audio_path)
     whisper_wav = wav
     try:
-        whisper_wav = prepare_audio_for_whisper(wav)
+        precomputed = _load_mono_rms(wav)
+        whisper_wav = prepare_audio_for_whisper(wav, precomputed=precomputed)
         transcript = transcribe(whisper_wav, language=language)
-        audio_pauses = detect_pauses_audio(wav, transcript["words"])
+        audio_pauses = detect_pauses_audio(wav, transcript["words"], precomputed=precomputed)
         analysis = analyze_speech(transcript, audio_pauses)
     finally:
         for tmp in {wav, whisper_wav}:

@@ -44,6 +44,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
       keywords: ["Code quality", "Automation", "Validation", "Reliability", "Time saved"],
       rationale: "Measures initiative and maintainability mindset.",
     },
+    {
+      prompt:
+        "Tell me about a technical decision or architecture trade-off you disagreed with on a team project. How did you discuss it and reach alignment?",
+      keywords: ["Trade-offs", "Communication", "System design", "Collaboration", "Outcome"],
+      rationale: "Assesses technical diplomacy and evidence-based reasoning.",
+    },
+    {
+      prompt:
+        "Describe a time you had to quickly learn an unfamiliar library, language, or infrastructure tool to unblock a deliverable.",
+      keywords: ["Documentation", "Learning", "Debugging", "Adaptability", "Deliverables"],
+      rationale: "Tests ramp-up speed and ownership under uncertainty.",
+    },
   ],
   "Frontend Developer": [
     {
@@ -63,6 +75,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
         "Tell me about a time design requirements changed late in a sprint or conflicted with backend API data. How did you handle it?",
       keywords: ["API", "Communication", "Trade-offs", "Collaboration", "Outcome"],
       rationale: "Checks adaptability and cross-functional collaboration.",
+    },
+    {
+      prompt:
+        "Describe a tricky cross-browser or mobile layout bug you tracked down. How did you reproduce it and prevent regressions?",
+      keywords: ["CSS", "Debugging", "Responsive design", "Testing", "Reliability"],
+      rationale: "Assesses frontend diagnostics and quality discipline.",
+    },
+    {
+      prompt:
+        "Tell me about a reusable component library or design pattern you introduced to help teammates build faster.",
+      keywords: ["Design system", "TypeScript", "Code review", "Maintainability", "Time saved"],
+      rationale: "Measures frontend architecture and team leverage.",
     },
   ],
   "Backend Developer": [
@@ -84,6 +108,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
       keywords: ["Debugging", "Database", "Server", "Communication", "Root cause"],
       rationale: "Tests incident handling and service ownership.",
     },
+    {
+      prompt:
+        "Describe a time you designed a data model or API contract used by other developers. How did you handle edge cases and versioning?",
+      keywords: ["System design", "API", "Database", "Documentation", "Collaboration"],
+      rationale: "Checks API ergonomics and cross-team engineering thinking.",
+    },
+    {
+      prompt:
+        "Tell me about a concurrency, caching, or rate-limiting issue you diagnosed or planned for in a backend service.",
+      keywords: ["Caching", "Concurrency", "Performance", "Monitoring", "Outcome"],
+      rationale: "Probes scalability fundamentals and operational awareness.",
+    },
   ],
   "Data Analyst": [
     {
@@ -103,6 +139,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
         "Tell me about a time your analysis contradicted what a stakeholder expected. How did you present the evidence?",
       keywords: ["Analysis", "Statistics", "Stakeholder", "Communication", "Result"],
       rationale: "Tests objectivity and persuasive communication.",
+    },
+    {
+      prompt:
+        "Describe a recurring reporting task you automated using SQL, Python, or BI tools. What time or error reduction did it achieve?",
+      keywords: ["SQL", "Python", "Automation", "Data quality", "Time saved"],
+      rationale: "Measures analytical efficiency and automation mindset.",
+    },
+    {
+      prompt:
+        "Tell me about an ambiguous business question you translated into measurable KPIs and an actionable analysis.",
+      keywords: ["KPI", "Problem solving", "Requirements", "Reporting", "Outcome"],
+      rationale: "Evaluates structured problem framing.",
     },
   ],
   "AI / Machine Learning Engineer": [
@@ -124,6 +172,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
       keywords: ["Machine learning", "NLP", "Python", "API", "Impact"],
       rationale: "Checks full-lifecycle ML engineering capability.",
     },
+    {
+      prompt:
+        "Describe a data quality, bias, or label imbalance issue you uncovered in a dataset and how you mitigated it.",
+      keywords: ["Data cleaning", "Evaluation", "Validation", "Metrics", "Reliability"],
+      rationale: "Assesses rigor around training data and model fairness.",
+    },
+    {
+      prompt:
+        "Tell me about a time you explained model limitations or failure modes to non-technical teammates or stakeholders.",
+      keywords: ["Communication", "Evaluation", "Stakeholder", "Trade-offs", "Outcome"],
+      rationale: "Checks practical AI communication and expectation setting.",
+    },
   ],
   "UI/UX Designer": [
     {
@@ -143,6 +203,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
         "Tell me about how you balanced visual consistency and accessibility across screens or a shared design system.",
       keywords: ["Design system", "Accessibility", "Interaction design", "Feedback", "Result"],
       rationale: "Checks systematic thinking and inclusive design.",
+    },
+    {
+      prompt:
+        "Describe a time developers pushed back on a design due to technical feasibility. How did you collaborate on an alternative?",
+      keywords: ["Collaboration", "Trade-offs", "Prototype", "Communication", "Outcome"],
+      rationale: "Assesses cross-functional partnership and pragmatism.",
+    },
+    {
+      prompt:
+        "Tell me about a design decision you defended using user evidence or metrics rather than personal preference.",
+      keywords: ["User research", "Evidence", "Metrics", "Stakeholder", "Impact"],
+      rationale: "Measures research-driven design maturity.",
     },
   ],
   "QA Engineer": [
@@ -164,6 +236,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
       keywords: ["Communication", "API testing", "Evidence", "Collaboration", "Outcome"],
       rationale: "Checks constructive advocacy for quality.",
     },
+    {
+      prompt:
+        "Describe a flaky test suite or manual QA bottleneck you improved to speed up release verification.",
+      keywords: ["Automation testing", "CI/CD", "Reliability", "Validation", "Time saved"],
+      rationale: "Evaluates QA engineering initiative and tooling skill.",
+    },
+    {
+      prompt:
+        "Tell me about an edge case you caught early during requirements or design review before code was even written.",
+      keywords: ["Requirements", "Test planning", "Risk", "Communication", "Impact"],
+      rationale: "Tests shift-left quality mindset.",
+    },
   ],
   "Project Manager": [
     {
@@ -183,6 +267,18 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
         "Tell me about a risk you spotted early in a sprint or project and the concrete steps you took before it became an escalation.",
       keywords: ["Risk management", "Scrum", "Deliverables", "Planning", "Impact"],
       rationale: "Checks proactive ownership and execution discipline.",
+    },
+    {
+      prompt:
+        "Describe a time a project fell behind schedule and you had to negotiate scope or communicate a delay clearly.",
+      keywords: ["Stakeholder", "Prioritization", "Trade-offs", "Communication", "Outcome"],
+      rationale: "Measures transparent leadership under pressure.",
+    },
+    {
+      prompt:
+        "Tell me about a retrospective or process change you led that measurably improved how your team delivered.",
+      keywords: ["Agile", "Process improvement", "Feedback", "Team coordination", "Metrics"],
+      rationale: "Assesses continuous improvement and team leadership.",
     },
   ],
   General: [
@@ -204,12 +300,36 @@ const ROLE_QUESTION_TEMPLATES: Record<string, RoleQuestionTemplate[]> = {
       keywords: ["Initiative", "Planning", "Process improvement", "Feedback", "Impact"],
       rationale: "Checks proactiveness and continuous improvement.",
     },
+    {
+      prompt:
+        "Tell me about a time you had to learn an unfamiliar tool or domain quickly to deliver a project milestone.",
+      keywords: ["Learning", "Adaptability", "Planning", "Problem solving", "Outcome"],
+      rationale: "Measures learning agility and self-direction.",
+    },
+    {
+      prompt:
+        "Describe a time you received critical feedback on your work. How did you handle it and apply it afterward?",
+      keywords: ["Feedback", "Ownership", "Growth", "Iteration", "Improvement"],
+      rationale: "Evaluates coachability and accountability.",
+    },
+    {
+      prompt:
+        "Tell me about a time requirements changed unexpectedly midway through a project. How did you reprioritize?",
+      keywords: ["Prioritization", "Adaptability", "Communication", "Stakeholder", "Result"],
+      rationale: "Tests composure and structured planning under ambiguity.",
+    },
+    {
+      prompt:
+        "Describe a mistake or setback in a project you worked on. How did you take ownership and prevent it from happening again?",
+      keywords: ["Accountability", "Root cause", "Recovery", "Reflection", "Outcome"],
+      rationale: "Checks integrity, resilience, and reflection.",
+    },
   ],
 };
 
 function clampQuestionCount(count?: number): number {
-  if (typeof count !== "number" || Number.isNaN(count)) return 3;
-  return Math.max(3, Math.min(5, Math.round(count)));
+  if (typeof count !== "number" || Number.isNaN(count)) return 5;
+  return Math.max(3, Math.min(7, Math.round(count)));
 }
 
 function buildTargetLabel(input: PrepareInterviewRequest): string {
@@ -387,10 +507,16 @@ export function buildOfflinePreparation(
     });
   }
 
-  // 3. Fill remaining slots with rotated role-specific behavioral STAR questions
+  // 3. Fill remaining slots with rotated role-specific + general behavioral STAR questions
+  const combinedPool =
+    roleTemplates === ROLE_QUESTION_TEMPLATES.General
+      ? roleTemplates
+      : [...roleTemplates, ...ROLE_QUESTION_TEMPLATES.General];
+
   let offset = variation;
-  while (questions.length < questionCount && offset - variation < roleTemplates.length + 2) {
-    const tpl = roleTemplates[offset % roleTemplates.length];
+  let attempts = 0;
+  while (questions.length < questionCount && attempts < combinedPool.length) {
+    const tpl = combinedPool[offset % combinedPool.length];
     const alreadyExists = questions.some((q) => q.prompt === tpl.prompt);
     if (!alreadyExists) {
       questions.push({
@@ -402,6 +528,7 @@ export function buildOfflinePreparation(
       });
     }
     offset += 1;
+    attempts += 1;
   }
 
   return {

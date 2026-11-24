@@ -69,7 +69,7 @@ async function main() {
     const buildIdPath = path.join(frontendDir, ".next", "BUILD_ID");
     if (!fs.existsSync(buildIdPath)) {
       console.error(
-        "No production build found in frontend/.next. Run `npx next build --webpack` first or pass TEST_BASE_URL=http://localhost:3000."
+        "No production build found in frontend/.next. Run npm run build first or pass TEST_BASE_URL=http://localhost:3000."
       );
       process.exit(1);
     }
@@ -128,6 +128,18 @@ async function main() {
     await runTest("Unauthenticated /api/sessions returns 401", async () => {
       const res = await fetch(`${baseUrl}/api/sessions`);
       assert(res.status === 401, `Expected 401, got ${res.status}`);
+    });
+
+    await runTest("Unauthenticated interview and speech POST routes return 401", async () => {
+      const routes = [
+        "/api/interview/prepare",
+        "/api/interview/parse-resume",
+        "/api/speech",
+      ];
+      for (const route of routes) {
+        const res = await fetch(`${baseUrl}${route}`, { method: "POST" });
+        assert(res.status === 401, `${route}: expected 401, got ${res.status}`);
+      }
     });
 
     await runTest("Signup validation rejects invalid inputs (400)", async () => {

@@ -1,5 +1,9 @@
 import { generateInterviewPreparation } from "@/lib/interview/llmProvider";
-import type { InterviewTargetMode, PrepareInterviewRequest } from "@/lib/interview/types";
+import type {
+  ExperienceLevel,
+  InterviewTargetMode,
+  PrepareInterviewRequest,
+} from "@/lib/interview/types";
 
 const MAX_JD_INPUT = 15_000;
 const MAX_RESUME_INPUT = 25_000;
@@ -9,6 +13,13 @@ function sanitizeMode(value: unknown): InterviewTargetMode {
     return value;
   }
   return "role";
+}
+
+function sanitizeLevel(value: unknown): ExperienceLevel {
+  if (value === "internship" || value === "fresh_grad" || value === "junior") {
+    return value;
+  }
+  return "fresh_grad";
 }
 
 function sanitizeText(value: unknown, maxLen: number): string {
@@ -32,7 +43,7 @@ export async function POST(req: Request) {
   const rawCount =
     typeof rec.questionCount === "number" && Number.isFinite(rec.questionCount)
       ? Math.round(rec.questionCount)
-      : 3;
+      : 5;
   const rawVariation =
     typeof rec.variation === "number" && Number.isFinite(rec.variation)
       ? Math.max(0, Math.floor(rec.variation))
@@ -44,7 +55,8 @@ export async function POST(req: Request) {
     role: sanitizeText(rec.role, 100) || "Software Engineer",
     jobDescription: sanitizeText(rec.jobDescription, MAX_JD_INPUT),
     resumeText: sanitizeText(rec.resumeText, MAX_RESUME_INPUT),
-    questionCount: Math.max(3, Math.min(5, rawCount)),
+    experienceLevel: sanitizeLevel(rec.experienceLevel),
+    questionCount: Math.max(3, Math.min(7, rawCount)),
     variation: rawVariation,
   };
 

@@ -2,12 +2,29 @@ import type { SpeechUi } from "@/lib/speechApi";
 import type { ResumeTailorReport } from "@/lib/interview/types";
 import type { AnswerAnalysis, StarKey } from "./types";
 
+export interface VisionTimelineBucket {
+  sec: number;
+  eyeContact: number;
+  posture: number;
+}
+
 export interface VisionSnapshot {
   eyeContactScore: number;
   postureScore: number;
   eyeNudges: number;
   postureNudges: number;
   totalFrames: number;
+  timeline?: VisionTimelineBucket[];
+}
+
+export interface SavedFollowUp {
+  pillarLabel: string;
+  prompt: string;
+  transcript: string;
+  durationSec?: number;
+  wpm?: number;
+  fillerCount?: number;
+  fluencyScore?: number;
 }
 
 export interface SavedAnswer {
@@ -17,6 +34,7 @@ export interface SavedAnswer {
   speech?: SpeechUi | null;
   vision?: VisionSnapshot | null;
   durationSec?: number;
+  followUp?: SavedFollowUp | null;
 }
 
 export interface SavedSession {
@@ -85,6 +103,93 @@ export async function fetchSessions(): Promise<SavedSession[]> {
   return Array.isArray(data.sessions) ? data.sessions : EMPTY_SESSIONS;
 }
 
+export interface SessionSummary {
+  id: string;
+  completedAt: string;
+  mode: "company" | "role" | "general";
+  company: string;
+  role: string;
+  answerCount: number;
+  firstQuestion: string;
+  overallScore: number;
+  starScore: number;
+  deliveryScore: number | null;
+  presenceScore: number | null;
+}
+
+export type SessionSortOption = "newest" | "highest" | "lowest";
+
+export interface SessionSummaryQuery {
+  page?: number;
+  limit?: number;
+  q?: string;
+  mode?: "all" | "company" | "role" | "general";
+  sort?: SessionSortOption;
+}
+
+export interface SessionSummaryPage {
+  summaries: SessionSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export async function fetchSessionSummaries(
+  query: SessionSummaryQuery = {},
+  signal?: AbortSignal
+): Promise<SessionSummaryPage> {
+  const params = new URLSearchParams({ summary: "1" });
+  if (query.page && query.page > 1) params.set("page", String(query.page));
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.mode && query.mode !== "all") params.set("mode", query.mode);
+  if (query.sort && query.sort !== "newest") params.set("sort", query.sort);
+
+  const res = await fetch(`/api/sessions?${params.toString()}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (res.status === 401) {
+    return { summaries: [], total: 0, page: 1, limit: query.limit ?? 25, hasMore: false };
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to load sessions (${res.status}).`);
+  }
+  const data = (await res.json()) as Partial<SessionSummaryPage>;
+  return {
+    summaries: Array.isArray(data.summaries) ? data.summaries : [],
+    total: typeof data.total === "number" ? data.total : 0,
+    page: typeof data.page === "number" ? data.page : 1,
+    limit: typeof data.limit === "number" ? data.limit : 25,
+    hasMore: Boolean(data.hasMore),
+  };
+}
+
+export async function fetchSessionById(
+  id: string,
+  signal?: AbortSignal
+): Promise<SavedSession | null> {
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+    signal,
+  });
+  if (res.status === 401 || res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to load session (${res.status}).`);
+  }
+  const data = (await res.json()) as { session?: SavedSession };
+  return data.session ?? null;
+}
+
 export async function createSession(session: SavedSession): Promise<SavedSession> {
   const res = await fetch("/api/sessions", {
     method: "POST",
@@ -120,9 +225,13 @@ export function starCount(a: AnswerAnalysis): number {
 export function computeAnswerMetrics(answer: SavedAnswer): AnswerMetrics {
   const wordCount = answer.transcript.trim() ? answer.transcript.trim().split(/\s+/).length : 0;
   const hasMetricInResult = METRIC_RESULT_REGEX.test(answer.transcript);
+  const llm = answer.analysis.llmEvaluation;
 
   const starPillarScores = Object.fromEntries(
     STAR_KEYS.map((key) => {
+      if (llm?.pillarScores && typeof llm.pillarScores[key] === "number") {
+        return [key, Math.max(0, Math.min(100, Math.round(llm.pillarScores[key])))];
+      }
       const section = answer.analysis.star[key];
       if (!section.found) {
         return [key, wordCount >= 20 ? 20 : 0];
@@ -142,6 +251,17 @@ export function computeAnswerMetrics(answer: SavedAnswer): AnswerMetrics {
       4
   );
 
+  // Fold keyword coverage (and LLM question relevance when available) into the Content weight
+  const hasTargetKeywords = answer.analysis.matchedCount + answer.analysis.missingCount > 0;
+  const keywordCoverage = Math.max(0, Math.min(100, answer.analysis.coverage ?? 0));
+  const contentScore = llm
+    ? hasTargetKeywords
+      ? Math.round(starScore * 0.72 + keywordCoverage * 0.14 + llm.relevanceScore * 0.14)
+      : Math.round(starScore * 0.82 + llm.relevanceScore * 0.18)
+    : hasTargetKeywords
+      ? Math.round(starScore * 0.85 + keywordCoverage * 0.15)
+      : starScore;
+
   const deliveryScore = answer.speech ? Math.round(answer.speech.fluencyScore) : null;
   const presenceScore = answer.vision
     ? Math.round(
@@ -156,7 +276,7 @@ export function computeAnswerMetrics(answer: SavedAnswer): AnswerMetrics {
       )
     : null;
 
-  let weightedSum = starScore * 0.5;
+  let weightedSum = contentScore * 0.5;
   let weightTotal = 0.5;
   if (deliveryScore !== null) {
     weightedSum += deliveryScore * 0.25;

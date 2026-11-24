@@ -1,424 +1,155 @@
-# InterViewAI — Project Intelligence Guide
+# InterViewAI (Vokal.ai) — Project Intelligence Guide
 > **For AI agents, new contributors, and collaborators.**  
-> This document is the single source of truth for understanding the codebase, architecture, conventions, and what still needs to be built.
-
----
-
-## Table of Contents
-1. [Project Overview](#1-project-overview)
-2. [Team & Responsibilities](#2-team--responsibilities)
-3. [Repository Structure](#3-repository-structure)
-4. [Tech Stack](#4-tech-stack)
-5. [Architecture & Data Flow](#5-architecture--data-flow)
-6. [Frontend Deep Dive](#6-frontend-deep-dive)
-7. [Design System](#7-design-system)
-8. [What's Built vs. What's TODO](#8-whats-built-vs-whats-todo)
-9. [Key Conventions & Rules](#9-key-conventions--rules)
-10. [Running the Project](#10-running-the-project)
-11. [AI Agent Instructions](#11-ai-agent-instructions)
+> This document is the single source of truth for understanding the codebase, architecture, conventions, and remaining roadmap.
 
 ---
 
 ## 1. Project Overview
 
-**InterViewAI** is a real-time multimodal AI mock interview coach built for Malaysian university students preparing for behavioral (STAR-method) job interviews.
+**InterViewAI (Vokal.ai)** is a real-time multimodal AI mock interview coach built for Malaysian university students preparing for behavioral (STAR-method) job interviews.
 
 | Field | Value |
 |---|---|
-| **Full Name** | InterViewAI — Real-Time Multimodal AI Mock Interview Coach |
+| **Full Name** | InterViewAI (Vokal.ai) — Real-Time Multimodal AI Mock Interview Coach |
 | **Academic Context** | FTMK Workshop II (BITU 3973), Universiti Teknikal Malaysia Melaka (UTeM) |
-| **Target Users** | FTMK graduating students & Malaysian job seekers |
+| **Target Users** | FTMK graduating & internship (LI) students, Malaysian CS/IT job seekers |
 | **Interview Style** | STAR (Situation, Task, Action, Result) behavioral methodology |
-| **Key Differentiator** | All computer vision runs **client-side in the browser** (privacy-first, zero video upload) |
-
-### Core Problem Being Solved
-Malaysian CS graduates have limited access to realistic mock interview practice. Existing tools don't provide real-time, multimodal coaching (eye contact, posture, speech pacing, STAR structure) simultaneously.
+| **Key Differentiator** | All computer vision runs **100% client-side in the browser** (zero video upload); speech ASR is tuned for **Malaysian English & Manglish** |
 
 ---
 
-## 2. Team & Responsibilities
+## 2. Team & Module Ownership
 
-The project is divided into **6 functional modules**, each owned by a team member:
-
-| Module | Name | Owner | Description |
+| Module | Name | Owner | Implementation |
 |---|---|---|---|
-| **Module 1** | Interview Question & Voice Response | **Amirul** | System generates mock interview questions per job role; user answers by speaking |
-| **Module 2** | Speech-to-Text & Data Processing | **Alia** | Transcribes user's voice response and prepares data for downstream analysis |
-| **Module 3** | NLP & STAR Structure Analysis | **Syafiq** | Evaluates responses with NLP for industry keywords; verifies STAR structure coverage and gaps |
-| **Module 4** | Eye Contact & Posture Analysis | **Nabil** | Webcam-based real-time tracking; displays reminders when eye contact or posture needs improvement |
-| **Module 5** | Speech Analysis | **Alia** | Identifies filler words ("um", "ah", "like") and long pauses to assess fluency and pacing |
-| **Module 6** | Feedback & Performance Report | **Amirul** | Merges all analysis outputs into a final score, feedback summary, and improvement recommendations |
+| **Module 1** | Interview Question & Voice Response | **Amirul** | `SessionSetupCard`, `QuestionPrompt` (TTS read-aloud, 15s prep timer, follow-up probes), `useInterviewPrep`, `/api/interview/prepare` (3/5/7Q + Internship/Fresh Grad/Junior), `/api/interview/parse-resume`, `useAudioRecorder` |
+| **Module 2** | Speech-to-Text & Data Processing | **Alia** | `backend/main.py` + `backend/speech_module.py` (`malaysian-whisper-small-v3-ct2` via `faster-whisper`), `/api/speech` proxy, `useBackgroundTranscription` |
+| **Module 3** | NLP & STAR Structure Analysis | **Syafiq** | `src/lib/nlp/*` (EN + BM/Manglish regex STAR + keyword taxonomy) + hybrid LLM semantic STAR evaluator (`/api/interview/evaluate`, `starEvaluator.ts`) with rubric scores, STAR balance, and grounded rewrites |
+| **Module 4** | Eye Contact & Posture Analysis | **Nabil** | Client-side MediaPipe `FaceLandmarker` + `PoseLandmarker` (`MediaPipeSetup.ts`, `visionCoach.ts`, `useVisionCoach.ts`, `visionOverlay.ts`), 3s start grace window, 5s presence timeline buckets |
+| **Module 5** | Speech Analysis | **Alia** | `backend/speech_module.py` (WPM, hard/phrase/Manglish filler breakdown, audio-RMS long pause detection ≥2s, fluency score) + `AnnotatedTranscript.tsx` |
+| **Module 6** | Feedback & Performance Report | **Amirul** | MongoDB persistence (`/api/sessions`), `SessionAnalysisModal`, `(dashboard)/page.tsx` (`ProgressTrendChart`), `(dashboard)/reports/page.tsx` (STAR/keywords/speech/presence timeline/annotated transcript/print PDF/retry weakest question) |
 
-### Module Ownership Summary
-
-| Member | Modules | Primary Focus |
-|---|---|---|
-| **Amirul** | 1, 6 | Question generation, session orchestration, final report synthesis |
-| **Alia** | 2, 5 | Whisper ASR transcription, filler word & fluency analysis |
-| **Syafiq** | 3 | NLP keyword extraction, STAR structure classification |
-| **Nabil** | 4 | MediaPipe vision — eye contact tracking, posture detection via webcam |
-
-> ⚠️ **Hardware Note:** During local AI inference testing, keep the **MSI Katana GF66 cooling pad active**. Target CPU thermal limit: **< 80°C**.
+> **Hardware Note:** During local Whisper/LLM testing on laptops, keep cooling active (target CPU < 80°C).
 
 ---
 
 ## 3. Repository Structure
 
 ```
-WORKSHOP 2/                          ← Project root
-├── MILESTONE.md                     ← Milestone tracker
-├── modules_to_be_developed.md       ← Core 6 functional modules specification
-├── REDESIGN_PLAN.md                 ← Simplified Vokal.ai UI redesign plan & handoff
-├── TASK_LIST.md                     ← Persistent task checklist for model handoff
+WORKSHOP 2/
 ├── AGENTS.md                        ← THIS FILE — project intelligence guide
+├── modules_to_be_developed.md       ← Core 6 functional modules specification
+├── MILESTONE.md / TASK_LIST.md      ← Planning & milestone logs
+├── graphify-out/                    ← Knowledge graph (update via `graphify update .`)
+│
+├── backend/                         ← Python FastAPI Speech Service (Modules 2 & 5)
+│   ├── main.py                      ← POST /analyze-speech, GET /health (single-worker lock)
+│   ├── speech_module.py             ← Malaysian Whisper ASR, filler/Manglish & audio-RMS pause detection
+│   ├── convert_malaysian_whisper.py ← One-time CT2 int8 converter
+│   ├── test_speech_module.py        ← Backend tests
+│   └── models/malaysian-whisper-small-v3-ct2/
 │
 └── frontend/                        ← Next.js 16.4.5 App Router application (Vokal.ai)
-    ├── package.json                 ← Dependencies & npm scripts
-    ├── tailwind.config.ts           ← Tailwind v4 configuration
-    ├── next.config.ts               ← Next.js configuration (redirects, cacheComponents)
-    ├── postcss.config.mjs           ← PostCSS config (@tailwindcss/postcss for Tailwind v4)
-    ├── tsconfig.json                ← TypeScript configuration
-    │
+    ├── scripts/
+    │   ├── test-unit.mjs            ← Unit tests (STAR, keywords, scoring, 3/5/7Q, LLM grounding)
+    │   └── test-api.mjs             ← API smoke tests
     └── src/
         ├── app/
-        │   ├── globals.css          ← Vokal.ai framed-sheet design tokens
-        │   ├── layout.tsx           ← Root layout (IBM Plex Sans & Mono, metadata)
-        │   └── (dashboard)/         ← Persistent App Shell route group (Sidebar + TopHeader on all pages)
-        │       ├── layout.tsx       ← Collapsible Sidebar (228px / 56px icon rail + mobile drawer) + TopHeader
-        │       ├── page.tsx         ← Home overview (latest session summary, 3 KPIs, recent sessions list)
-        │       ├── interview/
-        │       │   └── page.tsx     ← Practice Room (Modules 1–5 live interview coaching)
-        │       └── reports/
-        │           └── page.tsx     ← Session Reports (Module 6 feedback, STAR/speech/transcript dropdowns)
-        │
+        │   ├── globals.css          ← Multi-theme tokens (editorial/studio/bento × light/dark) + print styles
+        │   ├── (auth)/              ← login, signup pages
+        │   ├── (dashboard)/         ← Persistent Sidebar + TopHeader layout
+        │   │   ├── page.tsx         ← Home overview, KPIs, ProgressTrendChart, recent sessions
+        │   │   ├── interview/page.tsx ← Practice Room (Modules 1–5 live coaching)
+        │   │   └── reports/page.tsx ← Session Reports (Module 6, print PDF, retry weakest Q)
+        │   └── api/
+        │       ├── auth/            ← login, signup, logout, me (HTTP-only session cookies)
+        │       ├── interview/       ← prepare (3/5/7Q + resume tailoring), parse-resume (PDF), evaluate (LLM STAR rubric)
+        │       ├── sessions/        ← GET/POST /api/sessions, DELETE /api/sessions/[id] (MongoDB)
+        │       └── speech/          ← Proxy to FastAPI POST /analyze-speech
         ├── components/
-        │   ├── layout/
-        │   │   ├── Sidebar.tsx      ← Collapsible persistent sidebar (Home, Practice, Reports)
-        │   │   └── TopHeader.tsx    ← Minimal 48px header with page title & privacy indicator
-        │   │
-        │   ├── interview/           ← Live Practice Room UI components
-        │   │   ├── index.ts         ← Barrel export for interview components
-        │   │   ├── QuestionPrompt.tsx       ← Module 1 question card + collapsible Keywords toggle
-        │   │   ├── StarChecklist.tsx        ← Module 3 live S/T/A/R 4-chip bar (click letter for summary)
-        │   │   ├── LiveCoachingTip.tsx      ← Collapsible 1-line AI coaching tip
-        │   │   ├── CandidateVideoFeed.tsx   ← Module 4 webcam wrapper + eye contact & posture alerts
-        │   │   ├── WebcamFeed.tsx           ← Low-level webcam component (getUserMedia + canvas overlay)
-        │   │   ├── ControlDock.tsx          ← Bottom dock: mic/camera/settings, start/stop, next question
-        │   │   ├── DeviceSettingsModal.tsx  ← Hardware input selection & live mic level tester
-        │   │   └── VisualNudge.tsx          ← Animated visual nudge alerts
-        │   │
+        │   ├── interview/           ← SessionSetupCard, QuestionPrompt, StarChecklist, LiveCoachingTip,
+        │   │                          CandidateVideoFeed, WebcamFeed, ControlDock, DeviceSettingsModal,
+        │   │                          Module3Analysis, SessionAnalysisModal, AnnotatedTranscript, StarFeedbackExtras
+        │   ├── layout/              ← Sidebar, TopHeader
+        │   └── ui/                  ← AppearanceMenu, BrandMark, ScoreRing, ProgressTrendChart
         ├── hooks/
-        │   ├── useFaceMesh.ts       ← MediaPipe FaceLandmarker rAF inference loop
-        │   ├── useMediaDevices.ts   ← Webcam & microphone enumeration + localStorage persistence
-        │   └── useTheme.ts          ← Theme state hook
-        │
+        │   ├── useAuth.tsx
+        │   ├── useAudioRecorder.ts
+        │   ├── useBackgroundTranscription.ts ← Serial background Whisper queue during 3/5/7Q sessions
+        │   ├── useInterviewPrep.ts           ← Role/company/level/count/resume prep + retry deep-links
+        │   ├── useInterviewShortcuts.ts      ← Space / M / Alt+Arrow shortcuts
+        │   ├── useMediaDevices.ts
+        │   ├── useSessions.ts
+        │   ├── useTheme.ts
+        │   └── useVisionCoach.ts
         └── lib/
-            ├── mockSessions.ts      ← Shared session dataset for Home (`/`) and Reports (`/reports`)
-            ├── mongodb.js           ← MongoDB client singleton (connection caching)
-            └── vision/
-                └── MediaPipeSetup.ts ← MediaPipe FaceLandmarker singleton init/destroy
+            ├── interview/           ← types.ts, llmProvider.ts, offlineGenerator.ts, starEvaluator.ts, analysisQueue.ts
+            ├── nlp/                 ← analyze.ts, star.ts, keywords.ts, taxonomy.ts, text.ts, types.ts, sessionStore.ts
+            ├── vision/              ← MediaPipeSetup.ts, visionCoach.ts, visionOverlay.ts, nudgeSound.ts
+            ├── auth.ts / mongodb.ts / sessionSerializer.ts / speechApi.ts / format.ts
 ```
 
 ---
 
-## 4. Tech Stack
+## 4. Tech Stack & Architecture
 
-### Frontend
-| Technology | Version | Purpose |
-|---|---|---|
-| **Next.js** | 16.4.0 (App Router) | React framework, SSR/client routing |
-| **React** | 19.3.0 | UI rendering |
-| **TypeScript** | ^5 | Type safety across entire codebase |
-| **Tailwind CSS** | ^4 | Utility-first styling (CSS-variable based design tokens) |
-| **Framer Motion** | ^14 | Animated visual nudges and micro-interactions |
-| **Lucide React** | ^1.52 | Icon library (used in WebcamFeed states) |
-| **Material Symbols** | CDN | Icon font for HUD overlays and buttons |
-| **Google Fonts** | CDN | IBM Plex Sans (UI) + IBM Plex Mono (telemetry) via `next/font/google` |
+- **Frontend:** Next.js 16.4.5 (App Router), React 19.3, TypeScript 5, Tailwind CSS v4, Framer Motion 14, `unpdf` (resume PDF text extraction).
+- **Client-Side Vision (Module 4):** `@mediapipe/tasks-vision` (`FaceLandmarker` with blendshapes/iris + `PoseLandmarker` for shoulder tilt, slouch, lean-in). **Video never leaves the browser.**
+- **Speech Backend (Modules 2 & 5):** FastAPI + `faster-whisper` running Mesolitica's `malaysian-whisper-small-v3` (CTranslate2 int8) + `librosa` RMS pause analysis.
+- **LLM Waterfall (Modules 1 & 3):** `Groq` → `Gemini` → `Ollama` → deterministic offline rule-based fallback (`resolveLlmProvider` / `invokeLlmJson` in `llmProvider.ts`).
+- **Database:** MongoDB (`practice_sessions`, `users`) via singleton in `src/lib/mongodb.ts`.
 
-### Vision AI (Client-Side — Browser)
-| Technology | Version | Purpose |
-|---|---|---|
-| **@mediapipe/tasks-vision** | ^1.1.0 | FaceLandmarker — 478 face landmarks, iris tracking, head pose |
-| **@mediapipe/camera_utils** | ^0.3 | Camera stream utilities |
-
-### Database & Backend
-| Technology | Version / Type | Purpose |
-|---|---|---|
-| **MongoDB** | ^7.7.0 (Official Driver) | NoSQL document database for session history, candidate profiles, evaluation logs |
-| **FastAPI** (Python) | Planned | REST API for audio/NLP processing |
-| **Whisper ASR** | Planned | Speech-to-text transcription |
-| **STAR Classification** | Planned | NLP model for Situation/Task/Action/Result detection |
+### End-to-End Session Flow
+1. Candidate configures target (`company`/`role`/`general`), session length (`3`/`5`/`7`Q), experience level (`internship`/`fresh_grad`/`junior`), optional JD & PDF resume → `POST /api/interview/prepare`.
+2. Candidate answers each question via mic (`useAudioRecorder`) while `useVisionCoach` runs real-time eye contact & posture tracking (with a 3s recording-start grace window and 5s timeline buckets).
+3. On stopping each answer, `useBackgroundTranscription` sends the clip to `/api/speech` in the background while the candidate moves to the next question.
+4. On **Finish & analyze**, `executeAnalysisQueue` reuses completed background transcripts, runs baseline EN/BM NLP (`analyzeAnswer`) + semantic LLM grading (`POST /api/interview/evaluate`), merges vision snapshots, persists to MongoDB (`POST /api/sessions`), and opens `SessionAnalysisModal`.
 
 ---
 
-## 5. Architecture & Data Flow
+## 5. Key Conventions & Rules
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    BROWSER (Client-Side)                  │
-│                                                           │
-│  Webcam (HD 1280×720) ──► WebcamFeed.tsx                 │
-│                               │ HTMLVideoElement ref      │
-│                               ▼                           │
-│                        useFaceMesh.ts                     │
-│                     (requestAnimationFrame loop)           │
-│                        ~15 fps state updates              │
-│                               │                           │
-│                    MediaPipeSetup.ts                      │
-│                  (FaceLandmarker singleton)                │
-│                  GPU-accelerated via WebGL                │
-│                               │                           │
-│              478 Face Landmarks per frame                 │
-│         ┌─────────────┬───────────────┐                  │
-│         ▼             ▼               ▼                  │
-│    Eye Contact    Head Pose      Expressions             │
-│    (iris 468-477) estimation    (blendshapes)            │
-│         │             │               │                  │
-│         └─────────────┴───────────────┘                  │
-│                        │                                  │
-│              CandidateVideoFeed HUD                       │
-│         (WPM overlay, eye contact %, posture alert)      │
-└──────────────────────────┬──────────────────────────────┘
-                           │ Audio stream only
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│                  BACKEND (Python / FastAPI)  [PLANNED]    │
-│                                                           │
-│  Audio Stream ──► Whisper ASR ──► Transcript             │
-│                                       │                   │
-│                              STAR Classifier              │
-│                         (Situation/Task/Action/Result)    │
-│                                       │                   │
-│                        Malaysian keyword taxonomy         │
-│                        Filler word detection (um, ah...)  │
-│                                       │                   │
-│                              MongoDB                      │
-│                   (session logs, candidate profiles)      │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Privacy Architecture
-> **Video never leaves the browser.** MediaPipe runs entirely in WebAssembly + WebGL on the client GPU. Only the audio stream is sent to the backend for speech transcription. This is an intentional design decision to preserve candidate privacy.
+- **Design Tokens Only:** Never hardcode hex values in JSX/TSX; always use CSS custom properties from `src/app/globals.css` (`--surface`, `--raised`, `--border`, `--accent`, `--positive`, `--negative`, `--warning-ink`, `--star-s-*`..`--star-r-*`) so all 6 theme/mode presets (`editorial`, `studio`, `bento` × `light`/`dark`) stay consistent.
+- **Video Gradients:** Any gradient over the webcam feed must use dark scrims (`black/60`), never inverted theme surface tokens.
+- **Singleton Vision Models:** Never import `@mediapipe/tasks-vision` directly in components — always go through `MediaPipeSetup.ts` and `useVisionCoach.ts`.
+- **Path Alias:** Always use `@/` imports (`src/`).
+- **Knowledge Graph:** After modifying code files, run `graphify update .`.
 
 ---
 
-## 6. Frontend Deep Dive
-
-### Entry Point: `src/app/(dashboard)/interview/page.tsx`
-The main `PracticeRoom` component owns all session state:
-- `isSessionActive` — starts/stops the interview timer and AI listening indicator
-- `isMicOn / isVideoOn` — controls for the bottom dock
-- `elapsedSeconds` — live timer (increments only while session is active)
-- `starProgress` — mock STAR detection state (to be driven by backend NLP)
-- `metrics` — mock HUD telemetry (to be driven by MediaPipe + Whisper)
-- `isDark / toggleTheme` — from `useTheme` hook, controls global dark mode
-
-### Component Responsibilities
-
-#### `WebcamFeed.tsx`
-- Owns `getUserMedia` permission lifecycle
-- Renders `<video>` mirrored (scaleX -1) for natural UX
-- Layers a `<canvas>` overlay for future face mesh debug drawing
-- Exposes `videoElement` and `canvasElement` via `forwardRef` / `useImperativeHandle`
-- States: `idle → requesting → active | denied | error`
-- **Video constraints:** 1280×720 ideal, 640×480 minimum, 16:9 aspect ratio, 30fps
-
-#### `CandidateVideoFeed.tsx`
-- Wraps `WebcamFeed` with a 16:9 aspect-ratio container (`aspect-video min-h-[420px]`)
-- Adds HUD overlays absolutely positioned inside:
-  - Top-left: WPM speech pacing gauge
-  - Top-right: Eye contact percentage tracker
-  - Bottom-left: Posture deviation alert (amber)
-  - Bottom-right: Filler word micro-counter
-- Dark gradient vignettes (always `black/60`) for HUD readability — NOT theme-sensitive tokens
-- Toggle between live webcam and a demo Unsplash image stream
-
-#### `useFaceMesh.ts`
-- Singleton pattern: loads ~4MB MediaPipe WASM + model once, reuses across renders
-- `requestAnimationFrame` loop runs at display refresh rate (~60fps)
-- React state is throttled to **~15fps** (`STATE_UPDATE_INTERVAL_MS = 66ms`) to avoid excessive re-renders
-- Returns `{ result, isModelReady, isDetecting, error }`
-- **TODO:** Pipe raw landmarks into eye-contact scoring function
-- **TODO:** Enable `refineLandmarks: true` for precise iris positions (indices 468–477)
-
-#### `useTheme.ts`
-- Reads `localStorage("theme")` on mount, falls back to OS `prefers-color-scheme`
-- Toggles `.dark` class on `<html>` element
-- Persists choice to `localStorage` on every toggle
-- Returned from `page.tsx` (note: the redesigned UI is light-only; the hook is retained but not currently wired)
-
-### Dark Mode Implementation
-The design system uses CSS custom properties in `globals.css`:
-- `:root {}` — light theme (cool crystalline blues, white surfaces)
-- `.dark {}` — dark theme (deep navy `#0d1b2e` base, inverted text/primary tokens)
-- `body` has `transition: background-color 0.3s ease, color 0.3s ease` for smooth switching
-- **Critical:** Any gradient that overlays the video feed must use `black/opacity` NOT `inverse-surface` token (which flips to white in dark mode)
-
----
-
-## 7. Design System
-
-Full spec in [`DESIGN.md`](./DESIGN.md). Summary:
-
-### Color Tokens (CSS Variables)
-| Token | Light Value | Dark Value | Role |
-|---|---|---|---|
-| `--surface` | `#f8f9ff` | `#0d1b2e` | Page background |
-| `--surface-container-lowest` | `#ffffff` | `#060e1a` | Cards, header |
-| `--primary` | `#0058be` | `#adc6ff` | CTAs, focus |
-| `--on-surface` | `#0b1c30` | `#dce8ff` | Body text |
-| `--tertiary` | `#006947` | `#4edea3` | Live/active states |
-| `--error` | `#ba1a1a` | `#ffb4ab` | Recording, warnings |
-
-### Typography
-- **UI & prose:** IBM Plex Sans
-- **Telemetry / IDs:** IBM Plex Mono (tabular-nums)
-- **Monospace metrics** (WPM, timers): `font-mono` via Tailwind
-
-### Spacing
-8-point grid system. Use Tailwind spacing utilities (`p-4` = 16px, `gap-6` = 24px).
-
-### Icons
-- **Material Symbols Outlined** (CDN) — used in all HUD chips and buttons
-- **Lucide React** — used in WebcamFeed state screens (Video, VideoOff, Loader2)
-
----
-
-## 8. What's Built vs. What's TODO
-
-### ✅ Built & Working
-- [x] Full Practice Room layout (split-screen, responsive 12-col grid)
-- [x] `Sidebar` + `TopHeader` persistent app shell (replaced the old `SessionHeader`)
-- [x] `QuestionPrompt` — behavioral question card with recording indicator
-- [x] `StarChecklist` — STAR progress tracker (mock data, UI only)
-- [x] `LiveCoachingTip` — coaching callout card
-- [x] `CandidateVideoFeed` — 16:9 webcam with HUD overlays (mock metrics)
-- [x] `WebcamFeed` — real webcam via `getUserMedia`, HD 1280×720 constraints
-- [x] `ControlDock` — mic/video/session toggle controls
-- [x] `VisualNudge` — animated alert component (Framer Motion)
-- [x] `MediaPipeSetup.ts` — FaceLandmarker singleton init/destroy
-- [x] `useFaceMesh.ts` — rAF inference loop, throttled state updates
-- [x] `useTheme.ts` — dark/light toggle with localStorage persistence
-- [x] Dark mode (full `.dark` CSS variable overrides + smooth transitions)
-- [x] Design system (`globals.css` with Material 3 tonal tokens)
-
-### 🔲 TODO — Vision AI
-- [ ] Enable `refineLandmarks: true` in `MediaPipeSetup.ts` for iris tracking (indices 468–477)
-- [ ] Wire `useFaceMesh` into `CandidateVideoFeed` / `WebcamFeed` to drive live HUD metrics
-- [ ] Implement eye-contact scoring algorithm using iris vs. camera vector
-- [ ] Implement posture detection using shoulder landmark alignment (MediaPipe Pose or FaceMesh head pose matrix)
-- [ ] Draw face mesh debug landmarks on `<canvas>` overlay (controlled by `showDebugOverlay` prop)
-- [ ] Replace mock `metrics` state in `page.tsx` with live MediaPipe output
-
-### 🔲 TODO — Speech & NLP Backend
-- [ ] Set up FastAPI project (`/backend`)
-- [ ] Integrate Whisper ASR for audio-to-text transcription
-- [ ] Build filler word detector (English: "um", "uh"; Malaysian: "ah", "lah", "actually")
-- [ ] Build STAR classification engine (Situation / Task / Action / Result coverage scoring)
-- [ ] Malaysian tech industry keyword taxonomy integration
-- [ ] REST API endpoints to feed transcript data back to Next.js frontend
-
-### 🔲 TODO — Integration
-- [ ] Wire live WPM / volume / clarity metrics to live audio analysis
-- [ ] Wire `StarChecklist` progress to live backend NLP output
-- [ ] Wire `LiveCoachingTip` to dynamic AI-generated coaching suggestions
-- [ ] Connect `ControlDock` mic toggle to actual audio stream on/off
-
-### 🔲 TODO — MongoDB & Data Layer
-- [x] Configure `MONGODB_URI` in `.env.local`
-- [x] Create MongoDB client singleton with cached promise (`mongodb.js`)
-- [ ] Define collections & TypeScript schemas (`candidates`, `sessions`, `star_evaluations`, `session_metrics`)
-- [ ] Create Next.js API routes (`/api/sessions`) or Server Actions to persist practice runs
-- [ ] Candidate dashboard for reviewing past session analytics from MongoDB
-
-### 🔲 TODO — Production Polish
-- [ ] Lecturer / anti-bias dashboard (`/components/dashboard`)
-- [ ] Offline/local fallback mode for exhibition booth
-- [ ] Calibrate visual nudge thresholds (avoid distraction during high-stress speech)
-- [ ] Fix edge-case race conditions in stream teardown
-
----
-
-## 9. Key Conventions & Rules
-
-### TypeScript
-- All components use strict TypeScript — no `any` unless unavoidable
-- Props interfaces are defined inline above each component
-- `forwardRef` + `useImperativeHandle` pattern used for DOM handle exposure (see `WebcamFeed`, `CandidateVideoFeed`)
-
-### Imports
-- Path alias `@/` maps to `src/` — always use this, never relative paths that go up more than one level
-- Components import from barrel `@/components/interview` where possible
-
-### Styling Rules
-- **Tailwind utility classes only** — no inline `style={}` except for specific overrides (`transform`, `fontVariationSettings`)
-- **Always use CSS design tokens** (`text-primary`, `bg-surface-container-low`) — never hardcode hex values in JSX
-- **Exception:** Video feed gradients must use `from-black/60` not `from-inverse-surface/80` — the latter flips to white in dark mode
-- Dark mode overrides live in `globals.css` `.dark {}` block — never use Tailwind's `dark:` prefix
-
-### Component Rules
-- All client components must have `"use client"` at the top
-- No component should own business logic it doesn't need — keep components dumb, push state up to `page.tsx`
-- MediaPipe hooks (`useFaceMesh`) belong in `src/hooks/`, not inside components
-
-### Naming
-- Components: `PascalCase` (e.g., `CandidateVideoFeed`)
-- Hooks: `camelCase` starting with `use` (e.g., `useFaceMesh`)
-- Files: `PascalCase.tsx` for components, `camelCase.ts` for hooks and utilities
-
----
-
-## 10. Running the Project
+## 6. Running & Verifying
 
 ```bash
-# Navigate to the frontend
+# 1. Start Python Speech Backend (Modules 2 & 5)
+cd "WORKSHOP 2/backend"
+uvicorn main:app --reload --port 8000
+
+# 2. Start Next.js Frontend
 cd "WORKSHOP 2/frontend"
-
-# Install dependencies (already done)
-npm install
-
-# Start dev server
 npm run dev
-# → Opens at http://localhost:3000
 
-# Lint check
-npm run lint
-
-# Production build (only when needed)
-npm run build
+# Verification commands
+npm run test:unit     # Unit tests (STAR, keywords, scoring, 3/5/7Q, LLM grounding)
+npx tsc --noEmit      # TypeScript check
+npm run lint          # ESLint
+npx next build --webpack
 ```
-
-> **Webcam permission:** The browser will ask for camera access on first load. Click "Allow". If denied, the `WebcamFeed` component shows an error state with instructions.
 
 ---
 
-## 11. AI Agent Instructions
+## 7. Current Status vs. Future Polish
 
-If you are an AI agent working on this codebase, follow these rules:
+### Built & Working
+- [x] Auth (`/login`, `/signup`, HTTP-only cookies) & MongoDB session persistence (`/api/sessions`)
+- [x] Configurable 3 / 5 / 7 question sessions + `Internship / Fresh Grad / Junior` level selector
+- [x] Resume PDF parsing (`/api/interview/parse-resume`) + anti-hallucination JD tailoring + multi-provider LLM fallback
+- [x] Browser TTS read-aloud, 15s prep timer, and contextual interviewer follow-up probes
+- [x] Background per-question transcription (`useBackgroundTranscription`) with Malaysian Whisper & Manglish filler detection
+- [x] Hybrid STAR analysis: instant EN/BM regex + post-session LLM semantic rubric (0–100 pillars, relevance, ownership, STAR time balance, grounded stronger rewrite)
+- [x] Live MediaPipe Face + Pose coaching (`visionCoach.ts`) with 3s start grace window & 5s presence timeline
+- [x] Multi-session `ProgressTrendChart` on Home, annotated transcripts (STAR tags + fillers + Manglish + pauses), print/PDF export, and one-click "Retry weakest question"
 
-### Always Do
-- Read `DESIGN.md` before touching any CSS or Tailwind classes
-- Use existing design tokens (`--primary`, `--surface-container-low`, etc.) — check `globals.css` for the full list
-- Keep the `useFaceMesh` + `MediaPipeSetup` singleton pattern — do not create new FaceLandmarker instances in components
-- Test that dark mode still works after any CSS changes (the `.dark` class is toggled on `<html>`)
-- Use `"use client"` directive for any component using React hooks or browser APIs
-
-### Never Do
-- Never hardcode hex color values in JSX/TSX — always use Tailwind design token classes
-- Never use `inverse-surface` for gradients overlaid on the video feed (it goes white in dark mode)
-- Never import MediaPipe directly in a React component — go through `MediaPipeSetup.ts` and `useFaceMesh.ts`
-- Never add `minHeight` constraints to `WebcamFeed` — the parent `CandidateVideoFeed` controls sizing via `aspect-video`
-- Never add a backend API call in a component — only in hooks or server actions
-
-### Current Mock Data Locations
-All the following are **currently fake/hardcoded** and need to be replaced with live data:
-- `src/lib/mockSessions.ts` (Home + Reports) - replace with MongoDB/backend output
-- Mock STAR / metrics state in `src/app/(dashboard)/interview/page.tsx` - replace with MediaPipe + Whisper + NLP output
-- `LiveCoachingTip` tip prop in `page.tsx` — replace with dynamic AI suggestion
-
-### Next Recommended Task
-The highest-value next step is wiring up the MediaPipe vision pipeline:
-1. Enable `refineLandmarks: true` in `MediaPipeSetup.ts`
-2. Call `useFaceMesh(webcamRef)` in `page.tsx`
-3. Map the `result.faceLandmarks[0]` iris landmarks (468–477) to an eye-contact percentage
-4. Push that percentage into the `metrics.eyeContact` state to drive the HUD
+### Future / Nice-to-Have Ideas
+- [ ] Audio playback scrubber synced to long pauses and filler timestamps in `/reports`
+- [ ] Optional lecturer/cohort aggregate analytics view
+- [ ] Offline exhibition kiosk toggle (pre-cached demo mode)

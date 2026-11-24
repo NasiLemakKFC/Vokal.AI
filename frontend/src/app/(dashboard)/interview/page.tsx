@@ -1,26 +1,39 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { Suspense, useState, useRef, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMediaDevices } from "@/hooks/useMediaDevices";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useVisionCoach } from "@/hooks/useVisionCoach";
 import {
+  useBackgroundTranscription,
+  type BackgroundTranscriptionStatus,
+} from "@/hooks/useBackgroundTranscription";
+import { useInterviewPrep } from "@/hooks/useInterviewPrep";
+import { useInterviewShortcuts } from "@/hooks/useInterviewShortcuts";
+import {
   analyzeSpeech,
   type SpeechAnalysisResponse,
   type SpeechLanguageMode,
-  type SpeechUi,
 } from "@/lib/speechApi";
+import { formatDuration } from "@/lib/format";
 import { analyzeAnswer } from "@/lib/nlp/analyze";
 import {
-  computeSessionMetrics,
   createSession,
-  type SavedAnswer,
   type SavedSession,
   type VisionSnapshot,
 } from "@/lib/nlp/sessionStore";
-import QuestionPrompt from "@/components/interview/QuestionPrompt";
+import {
+  EMPTY_DRAFT,
+  executeAnalysisQueue,
+  isDraftReady,
+  type QuestionDraft,
+} from "@/lib/interview/analysisQueue";
+import { DEFAULT_QUESTIONS } from "@/lib/interview/types";
+import QuestionPrompt, {
+  type FollowUpProbe,
+} from "@/components/interview/QuestionPrompt";
 import SessionSetupCard from "@/components/interview/SessionSetupCard";
 import StarChecklist, { type StarProgress } from "@/components/interview/StarChecklist";
 import LiveCoachingTip from "@/components/interview/LiveCoachingTip";
@@ -44,251 +57,64 @@ const SessionAnalysisModal = dynamic(
   () => import("@/components/interview/SessionAnalysisModal"),
   { ssr: false }
 );
-import {
-  DEFAULT_QUESTIONS,
-  type AiProviderUsed,
-  type InterviewQuestion,
-  type InterviewTarget,
-  type PrepareInterviewResponse,
-  type ResumeTailorReport,
-} from "@/lib/interview/types";
 
-interface QuestionDraft {
-  audioBlob: Blob | null;
-  durationSec: number;
-  manualTranscript: string;
-  visionSnapshot: VisionSnapshot | null;
-  speech: SpeechAnalysisResponse | null;
-}
+function buildFollowUpProbe(
+  transcript: string,
+  analysis: ReturnType<typeof analyzeAnswer>
+): FollowUpProbe | null {
+  const words = transcript.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 8) return null;
 
-const EMPTY_DRAFT: QuestionDraft = {
-  audioBlob: null,
-  durationSec: 0,
-  manualTranscript: "",
-  visionSnapshot: null,
-  speech: null,
-};
-
-function isDraftReady(draft: QuestionDraft | undefined): boolean {
-  if (!draft) return false;
-  return Boolean(
-    (draft.audioBlob && draft.audioBlob.size > 0) ||
-      draft.manualTranscript.trim().length > 0
-  );
-}
-
-function formatDuration(sec: number): string {
-  const s = Math.max(0, Math.round(sec));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${r < 10 ? "0" : ""}${r}`;
-}
-
-interface ExecuteAnalysisQueueParams {
-  startIdx: number;
-  initialQueue: AnalysisQueueItem[];
-  initialDrafts: Record<number, QuestionDraft>;
-  questions: InterviewQuestion[];
-  tailorReport: ResumeTailorReport | null;
-  speechLang: SpeechLanguageMode;
-  target: InterviewTarget;
-  analysisRunIdRef: { current: number };
-  abortControllerRef: { current: AbortController | null };
-  updateQueueItems: (next: AnalysisQueueItem[]) => void;
-  updateDrafts: (next: Record<number, QuestionDraft>) => void;
-  setCompletedSession: (session: SavedSession | null) => void;
-  setIsCompleting: (val: boolean) => void;
-  setModalPhase: (phase: AnalysisModalPhase) => void;
-  setSaveError: (msg: string | null) => void;
-}
-
-async function executeAnalysisQueue({
-  startIdx,
-  initialQueue,
-  initialDrafts,
-  questions,
-  tailorReport,
-  speechLang,
-  target,
-  analysisRunIdRef,
-  abortControllerRef,
-  updateQueueItems,
-  updateDrafts,
-  setCompletedSession,
-  setIsCompleting,
-  setModalPhase,
-  setSaveError,
-}: ExecuteAnalysisQueueParams): Promise<void> {
-  const runId = ++analysisRunIdRef.current;
-  let workingQueue = initialQueue.map((it) => ({ ...it }));
-  let workingDrafts = { ...initialDrafts };
-
-  const waitWithRun = (ms: number) =>
-    new Promise<boolean>((resolve) => {
-      window.setTimeout(() => {
-        resolve(analysisRunIdRef.current === runId);
-      }, ms);
-    });
-
-  const patchItem = (idx: number, patch: Partial<AnalysisQueueItem>) => {
-    workingQueue = workingQueue.map((it, i) => (i === idx ? { ...it, ...patch } : it));
-    updateQueueItems(workingQueue);
-  };
-
-  for (let idx = startIdx; idx < workingQueue.length; idx++) {
-    if (analysisRunIdRef.current !== runId) return;
-    const item = workingQueue[idx];
-    if (item.status === "done" || item.status === "skipped") continue;
-
-    patchItem(idx, {
-      status: "analyzing",
-      subStage: "speech_transcribe",
-      errorMessage: undefined,
-    });
-
-    const draft = workingDrafts[item.questionIndex] ?? EMPTY_DRAFT;
-    let speechUi: SpeechUi | null = draft.speech?.ui ?? null;
-    let transcriptText = draft.manualTranscript.trim();
-
-    if (draft.audioBlob && draft.audioBlob.size > 0 && !draft.speech) {
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      const startedAt = Date.now();
-      let movedToFluency = false;
-
-      const fluencyTimer = window.setTimeout(() => {
-        if (analysisRunIdRef.current !== runId) return;
-        movedToFluency = true;
-        patchItem(idx, { subStage: "speech_fluency" });
-      }, 1500);
-
-      try {
-        const speechResult = await analyzeSpeech(
-          draft.audioBlob,
-          speechLang,
-          controller.signal
-        );
-        window.clearTimeout(fluencyTimer);
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-        }
-        if (analysisRunIdRef.current !== runId) return;
-
-        speechUi = speechResult.ui;
-        if (speechResult.ui.transcript) {
-          transcriptText = speechResult.ui.transcript;
-        }
-        const updatedDraft: QuestionDraft = {
-          ...draft,
-          speech: speechResult,
-          manualTranscript: speechResult.ui.transcript || draft.manualTranscript,
-        };
-        workingDrafts = {
-          ...workingDrafts,
-          [item.questionIndex]: updatedDraft,
-        };
-        updateDrafts(workingDrafts);
-
-        if (!movedToFluency) {
-          patchItem(idx, { subStage: "speech_fluency" });
-          if (!(await waitWithRun(320))) return;
-        } else if (Date.now() - startedAt < 1850) {
-          if (!(await waitWithRun(320))) return;
-        }
-      } catch (err) {
-        window.clearTimeout(fluencyTimer);
-        if (abortControllerRef.current === controller) {
-          abortControllerRef.current = null;
-        }
-        if (controller.signal.aborted || analysisRunIdRef.current !== runId) return;
-        const message =
-          err instanceof Error ? err.message : "Speech analysis failed.";
-        patchItem(idx, { status: "error", errorMessage: message });
-        return;
-      }
-    } else {
-      if (!(await waitWithRun(280))) return;
-      patchItem(idx, { subStage: "speech_fluency" });
-      if (!(await waitWithRun(240))) return;
-    }
-
-    // Module 3: NLP & STAR mapping
-    patchItem(idx, { subStage: "nlp_star" });
-    const nlpResult = analyzeAnswer(transcriptText, {
-      role: target.mode === "role" || target.mode === "company" ? target.role : "",
-      jobDescription: target.mode !== "general" ? target.jobDescription : "",
-      question: item.question,
-      questionKeywords: questions[item.questionIndex]?.keywords ?? [],
-    });
-    if (!(await waitWithRun(400))) return;
-
-    // Module 4: Merge vision snapshot
-    patchItem(idx, { subStage: "vision_merge" });
-    const savedAnswer: SavedAnswer = {
-      question: item.question,
-      transcript: transcriptText,
-      analysis: nlpResult,
-      speech: speechUi,
-      vision: draft.visionSnapshot ?? null,
-      durationSec: speechUi?.durationSec ?? draft.durationSec ?? 0,
+  if (!analysis.star.result.found) {
+    return {
+      pillarLabel: "Missing Result",
+      prompt:
+        "What measurable outcome or concrete improvement proved your solution worked?",
     };
-    if (!(await waitWithRun(300))) return;
-
-    patchItem(idx, {
-      status: "done",
-      subStage: "done",
-      result: savedAnswer,
-    });
-    if (!(await waitWithRun(200))) return;
   }
-
-  if (analysisRunIdRef.current !== runId) return;
-  const doneAnswers = workingQueue
-    .filter((it) => it.status === "done" && it.result)
-    .map((it) => it.result as SavedAnswer);
-
-  if (doneAnswers.length === 0) {
-    setModalPhase("closed");
-    return;
+  if (!analysis.star.action.found) {
+    return {
+      pillarLabel: "Clarify Action",
+      prompt:
+        "Walk me through the exact technical steps and decisions you personally took rather than the team as a whole.",
+    };
   }
-
-  const sessionMetrics = computeSessionMetrics(doneAnswers);
-  const newSession: SavedSession = {
-    id: `session-${Date.now()}`,
-    completedAt: new Date().toISOString(),
-    mode: target.mode,
-    company: target.company,
-    role: target.role,
-    jobDescription: target.jobDescription,
-    tailorReport,
-    answers: doneAnswers,
-    overallScore: sessionMetrics.overallScore,
-    starScore: sessionMetrics.starScore,
-    deliveryScore: sessionMetrics.deliveryScore,
-    presenceScore: sessionMetrics.presenceScore,
-  };
-
-  let persistedSession = newSession;
-  try {
-    persistedSession = await createSession(newSession);
-  } catch (err) {
-    setSaveError(
-      err instanceof Error
-        ? `Analysis finished, but saving to MongoDB failed: ${err.message}`
-        : "Analysis finished, but saving to MongoDB failed."
-    );
+  if (!analysis.star.task.found) {
+    return {
+      pillarLabel: "Clarify Task",
+      prompt:
+        "What specific responsibility or target were you personally accountable for in that situation?",
+    };
   }
-  setCompletedSession(persistedSession);
-  setIsCompleting(true);
-  if (!(await waitWithRun(600))) return;
-
-  setIsCompleting(false);
-  setModalPhase("review");
+  if (words.length < 30) {
+    return {
+      pillarLabel: "Add Depth",
+      prompt:
+        "Could you expand briefly on the biggest technical trade-off you had to make and why?",
+    };
+  }
+  return null;
 }
 
-export default function PracticeRoom() {
+function PracticeRoomContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const webcamRef = useRef<WebcamFeedHandle>(null);
+
+  const initialRetry = useMemo(() => {
+    const prompt = searchParams.get("retryPrompt")?.trim();
+    if (!prompt) return null;
+    const role = searchParams.get("retryRole")?.trim() || undefined;
+    const kwRaw = searchParams.get("retryKeywords")?.trim();
+    const keywords = kwRaw
+      ? kwRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 6)
+      : undefined;
+    return { prompt, role, keywords };
+  }, [searchParams]);
 
   const {
     audioDevices,
@@ -319,39 +145,59 @@ export default function PracticeRoom() {
 
   const [drafts, setDrafts] = useState<Record<number, QuestionDraft>>({});
   const draftsRef = useRef<Record<number, QuestionDraft>>({});
-  const updateDrafts = (next: Record<number, QuestionDraft>) => {
+  const updateDrafts = useCallback((next: Record<number, QuestionDraft>) => {
     draftsRef.current = next;
     setDrafts(next);
-  };
+  }, []);
+
+  const handleBackgroundTranscriptionStatus = useCallback(
+    (
+      qIdx: number,
+      audioVersion: number,
+      status: BackgroundTranscriptionStatus,
+      result?: SpeechAnalysisResponse,
+      errorMessage?: string
+    ) => {
+      const current = draftsRef.current[qIdx];
+      if (!current || current.audioVersion !== audioVersion) return;
+
+      const updated: QuestionDraft = {
+        ...current,
+        transcriptionStatus: status,
+        transcriptionError: status === "error" ? (errorMessage ?? null) : null,
+        ...(status === "done" && result
+          ? {
+              speech: result,
+              manualTranscript: result.ui.transcript || current.manualTranscript,
+            }
+          : {}),
+      };
+      updateDrafts({ ...draftsRef.current, [qIdx]: updated });
+    },
+    [updateDrafts]
+  );
+
+  const {
+    enqueue: enqueueBgTranscription,
+    waitForQuestion: waitForBgTranscription,
+    cancelAll: cancelAllBgTranscription,
+  } = useBackgroundTranscription({
+    onStatusChange: handleBackgroundTranscriptionStatus,
+  });
 
   const [speechLang, setSpeechLang] = useState<SpeechLanguageMode>("en");
   const [speechError, setSpeechError] = useState<string | null>(null);
-
-  // Module 1 & 3: target role/company, resume & generated questions state
-  const [target, setTarget] = useState<InterviewTarget>({
-    mode: "role",
-    company: "",
-    role: "Software Engineer",
-    jobDescription: "",
-  });
-  const [questions, setQuestions] = useState<InterviewQuestion[]>(DEFAULT_QUESTIONS);
-  const [isTailored, setIsTailored] = useState(false);
-  const [resumeText, setResumeText] = useState("");
-  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
-  const [tailorReport, setTailorReport] = useState<ResumeTailorReport | null>(null);
-  const [prepMeta, setPrepMeta] = useState<{
-    provider: AiProviderUsed;
-    model: string;
-    fallbackReason?: string;
-  } | null>(null);
-  const [isGeneratingPrep, setIsGeneratingPrep] = useState(false);
-  const [prepError, setPrepError] = useState<string | null>(null);
-  const [isSetupExpanded, setIsSetupExpanded] = useState(false);
-  const [lastPrepFingerprint, setLastPrepFingerprint] = useState<string | null>(null);
-  const variationRef = useRef(0);
-
   const [questionIndex, setQuestionIndex] = useState(0);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [recordingTarget, setRecordingTarget] = useState<"main" | "followup">("main");
+  const recordingTargetRef = useRef<"main" | "followup">("main");
+  const setRecordingMode = useCallback((mode: "main" | "followup") => {
+    recordingTargetRef.current = mode;
+    setRecordingTarget(mode);
+  }, []);
+  const [transcribingFollowUpIdx, setTranscribingFollowUpIdx] = useState<number | null>(
+    null
+  );
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -370,13 +216,11 @@ export default function PracticeRoom() {
   };
   const [isCompleting, setIsCompleting] = useState(false);
   const [completedSession, setCompletedSession] = useState<SavedSession | null>(null);
+  const [sessionSaveError, setSessionSaveError] = useState<string | null>(null);
+  const [isRetryingSave, setIsRetryingSave] = useState(false);
 
   const analysisRunIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const handleCycleNudgeDelay = () => {
-    setNudgeDelaySec((prev) => (prev === 3 ? 1.5 : prev === 1.5 ? 5 : 3));
-  };
 
   const isModalOpen = modalPhase !== "closed";
   const isAnalyzingModal = modalPhase === "analyzing";
@@ -398,6 +242,82 @@ export default function PracticeRoom() {
     nudgeDelaySec,
   });
 
+  const handleQuestionsReplaced = useCallback(() => {
+    cancelAllBgTranscription();
+    cancelRecording();
+    resetVisionSession();
+    updateDrafts({});
+    setQuestionIndex(0);
+    setElapsedSeconds(0);
+    setIsSessionActive(false);
+    setRecordingMode("main");
+    setTranscribingFollowUpIdx(null);
+    setSpeechError(null);
+  }, [
+    cancelAllBgTranscription,
+    cancelRecording,
+    resetVisionSession,
+    updateDrafts,
+    setRecordingMode,
+  ]);
+
+  // Compute ready count via ref/state cleanly
+  const readyAnswerCountForPrep = useMemo(
+    () => Object.values(drafts).filter((d) => isDraftReady(d)).length,
+    [drafts]
+  );
+
+  // Module 1 & 3 setup state (3/5/7Q, experience level, resume & JD tailoring)
+  const {
+    target,
+    setTarget,
+    questionCount,
+    handleQuestionCountChange,
+    questions,
+    isTailored,
+    resumeText,
+    setResumeText,
+    resumeFileName,
+    setResumeFileName,
+    tailorReport,
+    prepMeta,
+    isGeneratingPrep,
+    prepError,
+    isSetupExpanded,
+    setIsSetupExpanded,
+    isSameInputsAsLastPrep,
+    presets,
+    activePresetId,
+    handleGeneratePreparation,
+    handleResetDefaultQuestions,
+    handleClearSetup,
+    handleSavePreset,
+    handleLoadPreset,
+    handleDeletePreset,
+  } = useInterviewPrep({
+    isModalOpen,
+    readyAnswerCount: readyAnswerCountForPrep,
+    initialRetry,
+    onQuestionsReplaced: handleQuestionsReplaced,
+  });
+
+  const readyAnswerCount = useMemo(
+    () => questions.filter((_, idx) => isDraftReady(drafts[idx])).length,
+    [questions, drafts]
+  );
+
+  // Warn before accidental reload/close when unsaved recordings exist
+  useEffect(() => {
+    const hasUnsavedWork = (readyAnswerCount > 0 || isSessionActive) && !completedSession;
+    if (!hasUnsavedWork) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [readyAnswerCount, isSessionActive, completedSession]);
+
   useEffect(() => {
     if (!isSessionActive) return;
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000);
@@ -408,7 +328,6 @@ export default function PracticeRoom() {
     setRecorderMuted(!isMicOn);
   }, [isMicOn, setRecorderMuted]);
 
-  // Toggle Warm Editorial "On-Air" ambient focus dimming while actively recording
   useEffect(() => {
     document.documentElement.dataset.onAir = isSessionActive ? "true" : "false";
     return () => {
@@ -429,24 +348,9 @@ export default function PracticeRoom() {
   const currentQuestionItem = questions[questionIndex] ?? questions[0] ?? DEFAULT_QUESTIONS[0];
   const currentQuestion = currentQuestionItem.prompt;
 
-  const readyAnswerCount = useMemo(
-    () => questions.filter((_, idx) => isDraftReady(drafts[idx])).length,
-    [questions, drafts]
-  );
-
-  const currentFingerprint = useMemo(
-    () =>
-      JSON.stringify({
-        mode: target.mode,
-        company: target.company.trim(),
-        role: target.role,
-        jobDescription: target.mode === "general" ? "" : target.jobDescription.trim(),
-        resumeText: resumeText.trim(),
-      }),
-    [target, resumeText]
-  );
-  const isSameInputsAsLastPrep =
-    lastPrepFingerprint !== null && lastPrepFingerprint === currentFingerprint;
+  const handleCycleNudgeDelay = () => {
+    setNudgeDelaySec((prev) => (prev === 3 ? 1.5 : prev === 1.5 ? 5 : 3));
+  };
 
   const captureVisionSnapshot = (): VisionSnapshot | null => {
     if (!isVideoOn || !vision) return null;
@@ -465,10 +369,55 @@ export default function PracticeRoom() {
   const saveStoppedRecordingToDrafts = async (
     idx: number,
     durationSec: number,
-    snap: VisionSnapshot | null
+    snap: VisionSnapshot | null,
+    options?: { enqueueBackground?: boolean }
   ): Promise<Record<number, QuestionDraft>> => {
+    const mode = recordingTargetRef.current;
+    setRecordingMode("main");
     const audio = await stopRecording();
     const existing = draftsRef.current[idx] ?? EMPTY_DRAFT;
+
+    if (mode === "followup") {
+      const nextFollowUpVersion = (existing.followUpVersion ?? 0) + 1;
+      const nextDraft: QuestionDraft =
+        audio && audio.size > 0
+          ? {
+              ...existing,
+              followUpAudioBlob: audio,
+              followUpDurationSec: durationSec,
+              followUpSpeech: null,
+              followUpVersion: nextFollowUpVersion,
+            }
+          : existing;
+      const nextMap = { ...draftsRef.current, [idx]: nextDraft };
+      updateDrafts(nextMap);
+
+      if (audio && audio.size > 0 && options?.enqueueBackground !== false) {
+        setTranscribingFollowUpIdx(idx);
+        void analyzeSpeech(audio, speechLang)
+          .then((res) => {
+            const cur = draftsRef.current[idx];
+            if (!cur || (cur.followUpVersion ?? 0) !== nextFollowUpVersion) return;
+            updateDrafts({
+              ...draftsRef.current,
+              [idx]: {
+                ...cur,
+                followUpSpeech: res,
+                followUpTranscript: res.ui.transcript || cur.followUpTranscript || "",
+              },
+            });
+          })
+          .catch(() => {
+            // Silently defer to final analysisQueue retry if backend is busy/offline
+          })
+          .finally(() => {
+            setTranscribingFollowUpIdx((prev) => (prev === idx ? null : prev));
+          });
+      }
+      return nextMap;
+    }
+
+    const nextVersion = existing.audioVersion + 1;
     const nextDraft: QuestionDraft =
       audio && audio.size > 0
         ? {
@@ -477,6 +426,16 @@ export default function PracticeRoom() {
             durationSec,
             visionSnapshot: snap,
             speech: null,
+            audioVersion: nextVersion,
+            transcriptionStatus: "idle",
+            transcriptionError: null,
+            // Clear prior follow-up when re-recording the main answer from scratch
+            followUpPrompt: null,
+            followUpPillarLabel: null,
+            followUpAudioBlob: null,
+            followUpDurationSec: 0,
+            followUpTranscript: "",
+            followUpSpeech: null,
           }
         : {
             ...existing,
@@ -484,6 +443,10 @@ export default function PracticeRoom() {
           };
     const nextMap = { ...draftsRef.current, [idx]: nextDraft };
     updateDrafts(nextMap);
+
+    if (audio && audio.size > 0 && options?.enqueueBackground !== false) {
+      enqueueBgTranscription(idx, audio, nextVersion, speechLang);
+    }
     return nextMap;
   };
 
@@ -512,88 +475,12 @@ export default function PracticeRoom() {
     );
   };
 
-  const handleGeneratePreparation = async (options?: { forceRegenerate?: boolean }) => {
-    if (isModalOpen || isGeneratingPrep) return;
-    const forceRegenerate = Boolean(options?.forceRegenerate);
-    if (isSameInputsAsLastPrep && !forceRegenerate && isTailored) {
-      return;
-    }
-
-    const nextVariation =
-      forceRegenerate && isSameInputsAsLastPrep ? variationRef.current + 1 : 0;
-
-    setPrepError(null);
-    setIsGeneratingPrep(true);
-    try {
-      const res = await fetch("/api/interview/prepare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: target.mode,
-          company: target.company,
-          role: target.role,
-          jobDescription: target.jobDescription,
-          resumeText,
-          questionCount: 3,
-          variation: nextVariation,
-        }),
-      });
-      const data = (await res.json()) as Partial<PrepareInterviewResponse> & {
-        detail?: string;
-      };
-      if (!res.ok || !Array.isArray(data.questions) || !data.tailorReport) {
-        setPrepError(data.detail || "Could not prepare interview questions.");
-        return;
-      }
-
-      variationRef.current = nextVariation;
-      cancelRecording();
-      resetVisionSession();
-      updateDrafts({});
-      setQuestions(data.questions.length > 0 ? data.questions : DEFAULT_QUESTIONS);
-      setIsTailored(true);
-      setTailorReport(data.tailorReport);
-      setPrepMeta({
-        provider: data.provider ?? "offline",
-        model: data.model ?? "rule-based-nlp",
-        fallbackReason: data.fallbackReason,
-      });
-      setLastPrepFingerprint(currentFingerprint);
-      setQuestionIndex(0);
-      setElapsedSeconds(0);
-      setIsSessionActive(false);
-      setSpeechError(null);
-    } catch {
-      setPrepError("Failed to contact interview preparation service.");
-    } finally {
-      setIsGeneratingPrep(false);
-    }
-  };
-
-  const handleResetDefaultQuestions = () => {
-    if (isModalOpen || isGeneratingPrep) return;
-    cancelRecording();
-    resetVisionSession();
-    updateDrafts({});
-    setQuestions(DEFAULT_QUESTIONS);
-    setIsTailored(false);
-    setTailorReport(null);
-    setPrepMeta(null);
-    setLastPrepFingerprint(null);
-    variationRef.current = 0;
-    setQuestionIndex(0);
-    setElapsedSeconds(0);
-    setIsSessionActive(false);
-    setSpeechError(null);
-    setPrepError(null);
-  };
-
-  // Start = begin recording. Stop = buffer audio & vision snapshot for post-session 1-by-1 analysis.
   const handleToggleSession = async () => {
     if (isModalOpen) return;
 
     if (!isSessionActive) {
       setSpeechError(null);
+      setRecordingMode("main");
       resetVisionSession();
       try {
         await startRecording();
@@ -611,6 +498,32 @@ export default function PracticeRoom() {
     setIsSessionActive(false);
     const snap = captureVisionSnapshot();
     await saveStoppedRecordingToDrafts(questionIndex, elapsedSeconds, snap);
+  };
+
+  const handleAnswerFollowUp = async (probe: FollowUpProbe) => {
+    if (isModalOpen || isSessionActive) return;
+    setSpeechError(null);
+    const existing = draftsRef.current[questionIndex] ?? EMPTY_DRAFT;
+    updateDrafts({
+      ...draftsRef.current,
+      [questionIndex]: {
+        ...existing,
+        followUpPrompt: probe.prompt,
+        followUpPillarLabel: probe.pillarLabel,
+      },
+    });
+    setRecordingMode("followup");
+    try {
+      await startRecording();
+      setElapsedSeconds(0);
+      setIsSessionActive(true);
+      setIsSetupExpanded(false);
+    } catch {
+      setRecordingMode("main");
+      setSpeechError(
+        "Cannot use the microphone. Check the browser permission and the selected device."
+      );
+    }
   };
 
   const handleTranscriptChange = (value: string) => {
@@ -636,12 +549,13 @@ export default function PracticeRoom() {
       target,
       analysisRunIdRef,
       abortControllerRef,
+      waitForBackgroundTranscription: waitForBgTranscription,
       updateQueueItems,
       updateDrafts,
       setCompletedSession,
       setIsCompleting,
       setModalPhase,
-      setSaveError: setSpeechError,
+      setSaveError: setSessionSaveError,
     });
 
   const handleFinishSession = async () => {
@@ -654,7 +568,8 @@ export default function PracticeRoom() {
       latestDrafts = await saveStoppedRecordingToDrafts(
         questionIndex,
         elapsedSeconds,
-        snap
+        snap,
+        { enqueueBackground: false }
       );
     }
 
@@ -682,6 +597,8 @@ export default function PracticeRoom() {
     });
 
     setSpeechError(null);
+    setSessionSaveError(null);
+    setIsRetryingSave(false);
     setIsDeviceModalOpen(false);
     setCompletedSession(null);
     setIsCompleting(false);
@@ -719,16 +636,12 @@ export default function PracticeRoom() {
     analysisRunIdRef.current += 1;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    cancelRecording();
-    resetVisionSession();
-    updateDrafts({});
+    handleQuestionsReplaced();
     updateQueueItems([]);
     setCompletedSession(null);
+    setSessionSaveError(null);
+    setIsRetryingSave(false);
     setIsCompleting(false);
-    setIsSessionActive(false);
-    setElapsedSeconds(0);
-    setSpeechError(null);
-    setQuestionIndex(0);
     setModalPhase("closed");
   };
 
@@ -737,8 +650,26 @@ export default function PracticeRoom() {
     router.push(`/reports?session=${encodeURIComponent(sessionId)}`);
   };
 
-  // Module 3 live NLP & STAR analysis driven by current transcript (from Module 2 or typed/pasted)
-  const analysis = useMemo(
+  const handleRetrySave = async () => {
+    if (!completedSession || isRetryingSave) return;
+    setIsRetryingSave(true);
+    try {
+      const saved = await createSession(completedSession);
+      setCompletedSession(saved);
+      setSessionSaveError(null);
+    } catch (err) {
+      setSessionSaveError(
+        err instanceof Error
+          ? `Could not save session: ${err.message}`
+          : "Could not save session to your reports."
+      );
+    } finally {
+      setIsRetryingSave(false);
+    }
+  };
+
+  // Module 3 live NLP & STAR analysis: evaluate main answer to trigger follow-up, and combined answer for live STAR checklist
+  const baseAnalysis = useMemo(
     () =>
       analyzeAnswer(transcript, {
         role: target.mode === "role" || target.mode === "company" ? target.role : "",
@@ -755,6 +686,57 @@ export default function PracticeRoom() {
       currentQuestionItem.keywords,
     ]
   );
+
+  const followUpTranscript = currentDraft.followUpTranscript ?? "";
+  const combinedTranscript = followUpTranscript.trim()
+    ? `${transcript}\n${followUpTranscript.trim()}`.trim()
+    : transcript;
+
+  const analysis = useMemo(
+    () =>
+      followUpTranscript.trim()
+        ? analyzeAnswer(combinedTranscript, {
+            role: target.mode === "role" || target.mode === "company" ? target.role : "",
+            jobDescription: target.mode !== "general" ? target.jobDescription : "",
+            question: currentQuestion,
+            questionKeywords: currentQuestionItem.keywords,
+          })
+        : baseAnalysis,
+    [
+      followUpTranscript,
+      combinedTranscript,
+      target.mode,
+      target.role,
+      target.jobDescription,
+      currentQuestion,
+      currentQuestionItem.keywords,
+      baseAnalysis,
+    ]
+  );
+
+  const isRecordingFollowUp = isSessionActive && recordingTarget === "followup";
+  const hasFollowUpRecording = Boolean(
+    (currentDraft.followUpAudioBlob && currentDraft.followUpAudioBlob.size > 0) ||
+      followUpTranscript.trim().length > 0
+  );
+
+  const followUpProbe = useMemo<FollowUpProbe | null>(() => {
+    if (isSessionActive && recordingTarget === "main") return null;
+    if (currentDraft.followUpPrompt) {
+      return {
+        pillarLabel: currentDraft.followUpPillarLabel || "Follow-up",
+        prompt: currentDraft.followUpPrompt,
+      };
+    }
+    return buildFollowUpProbe(transcript, baseAnalysis);
+  }, [
+    isSessionActive,
+    recordingTarget,
+    currentDraft.followUpPrompt,
+    currentDraft.followUpPillarLabel,
+    transcript,
+    baseAnalysis,
+  ]);
 
   const starProgress: StarProgress = useMemo(() => {
     const hasText = transcript.trim().length > 0;
@@ -791,8 +773,6 @@ export default function PracticeRoom() {
     analysis.coaching[0] ??
     "Finish with a number — e.g. latency dropped from 420 ms to 85 ms.";
 
-  // Module 5 values come from speech analysis after completion.
-  // Module 4 values (eyeContact, postureAlert) come live from useVisionCoach (rolling 6s score).
   const metrics = {
     wpm: speech?.ui.wpm ?? 0,
     eyeContact: vision ? Math.round(vision.liveEyeContactScore) : 100,
@@ -805,62 +785,13 @@ export default function PracticeRoom() {
   );
   const canFinish = readyAnswerCount > 0 || isSessionActive;
 
-  // Keyboard shortcuts: Space = start/stop recording, M = toggle mic, Alt+Right/Left = next/prev question
-  const shortcutActionsRef = useRef({
+  useInterviewShortcuts({
     toggleSession: handleToggleSession,
     nextQuestion: handleNext,
     prevQuestion: handlePrev,
     toggleMic: () => setIsMicOn((v) => !v),
     disabled: isModalOpen || isDeviceModalOpen || isGeneratingPrep,
   });
-  useEffect(() => {
-    shortcutActionsRef.current = {
-      toggleSession: handleToggleSession,
-      nextQuestion: handleNext,
-      prevQuestion: handlePrev,
-      toggleMic: () => setIsMicOn((v) => !v),
-      disabled: isModalOpen || isDeviceModalOpen || isGeneratingPrep,
-    };
-  });
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (shortcutActionsRef.current.disabled) return;
-      const el = e.target as HTMLElement | null;
-      if (
-        el &&
-        (el.tagName === "INPUT" ||
-          el.tagName === "TEXTAREA" ||
-          el.tagName === "SELECT" ||
-          el.isContentEditable)
-      ) {
-        return;
-      }
-
-      if (e.code === "Space" && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        // Only intercept Space when focus isn't already on a button (avoid double-trigger)
-        if (el && el.tagName === "BUTTON") return;
-        e.preventDefault();
-        void shortcutActionsRef.current.toggleSession();
-      } else if (e.altKey && e.key === "ArrowRight") {
-        e.preventDefault();
-        shortcutActionsRef.current.nextQuestion();
-      } else if (e.altKey && e.key === "ArrowLeft") {
-        e.preventDefault();
-        shortcutActionsRef.current.prevQuestion();
-      } else if (
-        (e.key === "m" || e.key === "M") &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !e.metaKey
-      ) {
-        e.preventDefault();
-        shortcutActionsRef.current.toggleMic();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   // Pacing timer cues: 90s–150s (1:30–2:30) is the ideal behavioral STAR response duration
   const timerPacingState =
@@ -877,6 +808,12 @@ export default function PracticeRoom() {
       <SessionSetupCard
         target={target}
         onTargetChange={setTarget}
+        questionCount={questionCount}
+        onQuestionCountChange={(nextCount) =>
+          handleQuestionCountChange(nextCount, (maxIdx) =>
+            setQuestionIndex((prev) => Math.min(prev, maxIdx))
+          )
+        }
         resumeText={resumeText}
         resumeFileName={resumeFileName}
         onResumeChange={(text, fileName) => {
@@ -899,15 +836,29 @@ export default function PracticeRoom() {
         onToggleExpanded={() => setIsSetupExpanded((v) => !v)}
         onGenerate={(opts) => void handleGeneratePreparation(opts)}
         onResetDefaults={handleResetDefaultQuestions}
+        presets={presets}
+        activePresetId={activePresetId}
+        onSavePreset={handleSavePreset}
+        onLoadPreset={(preset) =>
+          handleLoadPreset(preset, (maxIdx) =>
+            setQuestionIndex((prev) => Math.min(prev, maxIdx))
+          )
+        }
+        onDeletePreset={handleDeletePreset}
+        onClearSetup={handleClearSetup}
       />
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
         <div className="flex flex-wrap items-center gap-2 text-[13px] text-[var(--muted)] min-w-0">
-          <div className="flex items-center gap-1.5" role="tablist" aria-label="Questions">
+          <div className="flex items-center gap-1.5 flex-wrap" role="tablist" aria-label="Questions">
             {questions.map((_, idx) => {
               const isActive = idx === questionIndex;
-              const isReady = isDraftReady(drafts[idx]);
+              const draftForTab = drafts[idx];
+              const isReady = isDraftReady(draftForTab);
+              const isTranscribingTab =
+                draftForTab?.transcriptionStatus === "transcribing" ||
+                draftForTab?.transcriptionStatus === "queued";
               return (
                 <button
                   key={idx}
@@ -915,6 +866,15 @@ export default function PracticeRoom() {
                   role="tab"
                   aria-selected={isActive}
                   disabled={isModalOpen}
+                  title={
+                    isTranscribingTab
+                      ? `Q${idx + 1} · Transcribing in background…`
+                      : draftForTab?.speech
+                        ? `Q${idx + 1} · Transcribed (${draftForTab.speech.ui.wpm} WPM)`
+                        : isReady
+                          ? `Q${idx + 1} · Recorded`
+                          : `Q${idx + 1}`
+                  }
                   onClick={() => void handleSelectQuestion(idx)}
                   className={`h-8 px-3 rounded-[var(--radius-control)] border text-[12px] font-medium tabular-nums flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50 ${
                     isActive
@@ -925,11 +885,16 @@ export default function PracticeRoom() {
                   }`}
                 >
                   Q{idx + 1}
-                  {isReady && (
+                  {isTranscribingTab ? (
+                    <span
+                      aria-label="Transcribing"
+                      className="w-3 h-3 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin"
+                    />
+                  ) : isReady ? (
                     <span className="material-symbols-outlined text-[15px] text-[var(--positive)]">
                       check_circle
                     </span>
-                  )}
+                  ) : null}
                 </button>
               );
             })}
@@ -1001,8 +966,28 @@ export default function PracticeRoom() {
             question={currentQuestion}
             keywords={currentQuestionItem.keywords}
             isRecording={isSessionActive && isMicOn}
+            isRecordingFollowUp={isRecordingFollowUp}
             questionType={currentQuestionItem.type}
             rationale={currentQuestionItem.rationale}
+            followUpProbe={followUpProbe}
+            hasFollowUpRecording={hasFollowUpRecording}
+            isTranscribingFollowUp={transcribingFollowUpIdx === questionIndex}
+            followUpTranscript={followUpTranscript}
+            onStartRecording={() => {
+              if (!isSessionActive) {
+                void handleToggleSession();
+              }
+            }}
+            onAnswerFollowUp={() => {
+              if (followUpProbe && !isSessionActive) {
+                void handleAnswerFollowUp(followUpProbe);
+              }
+            }}
+            onStopFollowUp={() => {
+              if (isRecordingFollowUp) {
+                void handleToggleSession();
+              }
+            }}
           />
           <StarChecklist progress={starProgress} />
           <LiveCoachingTip tip={liveTip} />
@@ -1112,17 +1097,34 @@ export default function PracticeRoom() {
             </div>
           </div>
 
-          {(hasCurrentRecording && !speech && !isSessionActive) ||
+          {(hasCurrentRecording && !isSessionActive) ||
           (speech && speech.ui.fillers.length > 0) ||
           speechError ? (
             <div className="flex flex-wrap items-center gap-3 text-[12px]">
-              {hasCurrentRecording && !speech && !isSessionActive && (
-                <span className="pill-positive gap-1.5">
-                  <span className="material-symbols-outlined text-[14px]">
-                    check_circle
+              {hasCurrentRecording && !isSessionActive && (
+                currentDraft.transcriptionStatus === "transcribing" ||
+                currentDraft.transcriptionStatus === "queued" ? (
+                  <span className="badge gap-1.5">
+                    <span className="w-3 h-3 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" />
+                    {currentDraft.transcriptionStatus === "transcribing"
+                      ? `Recorded · ${formatDuration(currentDraft.durationSec)} · Transcribing in background…`
+                      : `Recorded · ${formatDuration(currentDraft.durationSec)} · Queued for transcription…`}
                   </span>
-                  Recorded · {formatDuration(currentDraft.durationSec)} · Ready for analysis
-                </span>
+                ) : speech ? (
+                  <span className="pill-positive gap-1.5">
+                    <span className="material-symbols-outlined text-[14px]">
+                      check_circle
+                    </span>
+                    Transcribed · {formatDuration(currentDraft.durationSec)} · Ready for STAR review
+                  </span>
+                ) : (
+                  <span className="pill-positive gap-1.5">
+                    <span className="material-symbols-outlined text-[14px]">
+                      check_circle
+                    </span>
+                    Recorded · {formatDuration(currentDraft.durationSec)} · Ready for analysis
+                  </span>
+                )
               )}
               {speech && speech.ui.fillers.length > 0 && (
                 <span className="text-[var(--muted)]">
@@ -1193,6 +1195,9 @@ export default function PracticeRoom() {
         items={queueItems}
         isCompleting={isCompleting}
         completedSession={completedSession}
+        saveError={sessionSaveError}
+        isRetryingSave={isRetryingSave}
+        onRetrySave={() => void handleRetrySave()}
         onRetryItem={handleRetryItem}
         onSkipItem={handleSkipItem}
         onCancelAnalysis={handleCancelAnalysis}
@@ -1201,5 +1206,19 @@ export default function PracticeRoom() {
         onViewFullReport={handleViewFullReport}
       />
     </div>
+  );
+}
+
+export default function PracticeRoom() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-[1200px] mx-auto py-8 text-[13px] text-[var(--muted)]">
+          Loading practice room…
+        </div>
+      }
+    >
+      <PracticeRoomContent />
+    </Suspense>
   );
 }

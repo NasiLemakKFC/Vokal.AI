@@ -9,7 +9,10 @@ import {
   type SavedAnswer,
   type SavedSession,
 } from "@/lib/nlp/sessionStore";
+import { formatDuration, scoreTone } from "@/lib/format";
 import type { StarKey } from "@/lib/nlp/types";
+import AnnotatedTranscript from "@/components/interview/AnnotatedTranscript";
+import StarFeedbackExtras from "@/components/interview/StarFeedbackExtras";
 
 export type AnalysisModalPhase = "closed" | "analyzing" | "review";
 
@@ -36,6 +39,9 @@ export interface SessionAnalysisModalProps {
   items: AnalysisQueueItem[];
   isCompleting: boolean;
   completedSession: SavedSession | null;
+  saveError?: string | null;
+  isRetryingSave?: boolean;
+  onRetrySave?: () => void;
   onRetryItem: (queueIndex: number) => void;
   onSkipItem: (queueIndex: number) => void;
   onCancelAnalysis: () => void;
@@ -68,21 +74,6 @@ const SUB_STAGE_PROGRESS: Record<AnalysisSubStage, number> = {
   done: 1,
 };
 
-function scoreTone(score: number): string {
-  return score >= 80
-    ? "text-[var(--positive)]"
-    : score >= 70
-      ? "text-[var(--warning-ink)]"
-      : "text-[var(--negative)]";
-}
-
-function formatDuration(sec: number): string {
-  const s = Math.max(0, Math.round(sec));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${r < 10 ? "0" : ""}${r}`;
-}
-
 function targetLabel(session: SavedSession): string {
   if (session.mode === "general") return "General Interview";
   if (session.company.trim()) return `${session.company.trim()} · ${session.role}`;
@@ -109,8 +100,8 @@ function getSubStageSteps(hasAudio: boolean): {
     },
     {
       key: "nlp_star",
-      moduleLabel: "STAR structure & keywords",
-      description: "Classifying S, T, A, R and role keywords…",
+      moduleLabel: "STAR rubric & keywords",
+      description: "Grading S, T, A, R depth, relevance & rewrite…",
     },
     {
       key: "vision_merge",
@@ -445,11 +436,17 @@ function AnalyzingView({
 
 function ReviewView({
   session,
+  saveError,
+  isRetryingSave = false,
+  onRetrySave,
   onCloseReview,
   onStartNewSession,
   onViewFullReport,
 }: {
   session: SavedSession;
+  saveError?: string | null;
+  isRetryingSave?: boolean;
+  onRetrySave?: () => void;
   onCloseReview: () => void;
   onStartNewSession: () => void;
   onViewFullReport: (sessionId: string) => void;
@@ -508,10 +505,17 @@ function ReviewView({
             >
               Session STAR review
             </h2>
-            <span className="pill-positive gap-1">
-              <span className="material-symbols-outlined text-[14px]">check_circle</span>
-              Saved to Reports
-            </span>
+            {saveError ? (
+              <span className="pill-negative gap-1">
+                <span className="material-symbols-outlined text-[14px]">error</span>
+                Not saved
+              </span>
+            ) : (
+              <span className="pill-positive gap-1">
+                <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                Saved to Reports
+              </span>
+            )}
           </div>
           <p className="text-[12px] text-[var(--muted)] truncate mt-0.5">
             {targetLabel(session)} · {answers.length}{" "}
@@ -530,6 +534,14 @@ function ReviewView({
 
       {/* Scrollable Body */}
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        {saveError && (
+          <div
+            role="alert"
+            className="rounded-[var(--radius-control)] border border-[var(--pill-negative-border)] bg-[var(--pill-negative-bg)] text-[var(--pill-negative-ink)] px-3.5 py-2.5 text-[13px]"
+          >
+            {saveError}
+          </div>
+        )}
         {/* 4-column KPI Summary Strip */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {kpis.map((kpi) => (
@@ -629,7 +641,54 @@ function ReviewView({
                     </>
                   )}
                 </div>
+
+                {activeAnswer.followUp && (
+                  <div className="rounded-[var(--radius-control)] border border-[var(--border-accent)] bg-[var(--accent-soft)]/45 px-3 py-2.5 space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--accent-ink)]">
+                        <span className="material-symbols-outlined text-[14px]">
+                          forum
+                        </span>
+                        Interviewer follow-up · {activeAnswer.followUp.pillarLabel}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {typeof activeAnswer.followUp.wpm === "number" && (
+                          <span className="badge font-mono tabular-nums">
+                            {activeAnswer.followUp.wpm} WPM
+                          </span>
+                        )}
+                        {typeof activeAnswer.followUp.fillerCount === "number" && (
+                          <span className="badge font-mono tabular-nums">
+                            {activeAnswer.followUp.fillerCount} fillers
+                          </span>
+                        )}
+                        {typeof activeAnswer.followUp.fluencyScore === "number" && (
+                          <span className="badge font-mono tabular-nums">
+                            Fluency {activeAnswer.followUp.fluencyScore}%
+                          </span>
+                        )}
+                        {typeof activeAnswer.followUp.durationSec === "number" &&
+                          activeAnswer.followUp.durationSec > 0 && (
+                            <span className="text-[11px] font-mono tabular-nums text-[var(--muted)]">
+                              {Math.round(activeAnswer.followUp.durationSec)}s
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                    <p className="text-[12px] font-medium text-[var(--text)] leading-snug">
+                      &ldquo;{activeAnswer.followUp.prompt}&rdquo;
+                    </p>
+                    <p className="text-[12px] text-[var(--text-secondary)] border-l-2 border-[var(--accent)] pl-2 leading-relaxed">
+                      {activeAnswer.followUp.transcript}
+                    </p>
+                  </div>
+                )}
               </div>
+
+              {/* AI Rubric Insights + STAR Balance + Stronger Rewrite */}
+              {activeAnswer.analysis.llmEvaluation && (
+                <StarFeedbackExtras evaluation={activeAnswer.analysis.llmEvaluation} />
+              )}
 
               {/* 2x2 STAR Breakdown Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -771,43 +830,11 @@ function ReviewView({
                         </span>
                       </div>
                     )}
-                    {activeAnswer.analysis.sentences.length === 0 ? (
-                      <p className="text-[13px] text-[var(--muted)]">
-                        {activeAnswer.transcript || "No transcript available."}
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {activeAnswer.analysis.sentences.map((item, sIdx) => {
-                          const label =
-                            item.section === "unclassified"
-                              ? "Not classified"
-                              : STAR_META.find((s) => s.key === item.section)?.label;
-                          const tone =
-                            item.section === "situation"
-                              ? "border-[var(--star-s-border)] bg-[var(--star-s-bg)]"
-                              : item.section === "task"
-                                ? "border-[var(--star-t-border)] bg-[var(--star-t-bg)]"
-                                : item.section === "action"
-                                  ? "border-[var(--star-a-border)] bg-[var(--star-a-bg)]"
-                                  : item.section === "result"
-                                    ? "border-[var(--star-r-border)] bg-[var(--star-r-bg)]"
-                                    : "border-[var(--control)] bg-[var(--raised)]";
-                          return (
-                            <div
-                              key={sIdx}
-                              className={`rounded-[var(--radius-control)] border-l-[3px] px-3 py-2 ${tone}`}
-                            >
-                              <div className="text-[12px] font-medium text-[var(--muted)]">
-                                {label}
-                              </div>
-                              <p className="text-[13px] text-[var(--text)] mt-0.5">
-                                {item.text}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <AnnotatedTranscript
+                      transcript={activeAnswer.transcript}
+                      sentences={activeAnswer.analysis.sentences}
+                      speech={activeAnswer.speech}
+                    />
                   </div>
                 )}
               </div>
@@ -854,15 +881,27 @@ function ReviewView({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => onViewFullReport(session.id)}
-          className="btn-primary h-9 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer"
-        >
-          <span className="material-symbols-outlined text-[16px]">insights</span>
-          View full report
-          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-        </button>
+        {saveError && onRetrySave ? (
+          <button
+            type="button"
+            disabled={isRetryingSave}
+            onClick={onRetrySave}
+            className="btn-primary h-9 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+          >
+            <span className="material-symbols-outlined text-[16px]">refresh</span>
+            {isRetryingSave ? "Saving…" : "Retry save"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onViewFullReport(session.id)}
+            className="btn-primary h-9 px-4 text-[13px] font-medium flex items-center gap-1.5 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[16px]">insights</span>
+            View full report
+            <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+          </button>
+        )}
       </div>
     </motion.div>
   );
@@ -873,6 +912,9 @@ export default function SessionAnalysisModal({
   items,
   isCompleting,
   completedSession,
+  saveError,
+  isRetryingSave,
+  onRetrySave,
   onRetryItem,
   onSkipItem,
   onCancelAnalysis,
@@ -1001,6 +1043,9 @@ export default function SessionAnalysisModal({
                 <ReviewView
                   key={`review-${completedSession.id}`}
                   session={completedSession}
+                  saveError={saveError}
+                  isRetryingSave={isRetryingSave}
+                  onRetrySave={onRetrySave}
                   onCloseReview={onCloseReview}
                   onStartNewSession={onStartNewSession}
                   onViewFullReport={onViewFullReport}

@@ -51,6 +51,7 @@ function getDatabaseNameFromUri(uri: string): string {
 export async function ensureIndexes(db: Db): Promise<void> {
   if (!indexesPromise) {
     indexesPromise = (async () => {
+      await db.collection("practice_sessions").dropIndex("id_1").catch(() => {});
       await Promise.all([
         db.collection("users").createIndex({ email: 1 }, { unique: true }),
         db
@@ -62,7 +63,7 @@ export async function ensureIndexes(db: Db): Promise<void> {
         db.collection("auth_sessions").createIndex({ userId: 1 }),
         db
           .collection("practice_sessions")
-          .createIndex({ id: 1 }, { unique: true }),
+          .createIndex({ userId: 1, id: 1 }, { unique: true }),
         db
           .collection("practice_sessions")
           .createIndex({ userId: 1, completedAt: -1 }),

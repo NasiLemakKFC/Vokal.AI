@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import WebcamFeed, { type WebcamFeedHandle } from "@/components/interview/WebcamFeed";
 import VisualNudge from "@/components/interview/VisualNudge";
 import type { VisionBootStage } from "@/hooks/useVisionCoach";
@@ -88,6 +88,15 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
   ) {
     const [showDebug, setShowDebug] = useState(false);
     const [calibratedFlash, setCalibratedFlash] = useState(false);
+    const calibratedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+      return () => {
+        if (calibratedTimerRef.current) {
+          clearTimeout(calibratedTimerRef.current);
+        }
+      };
+    }, []);
 
     const isPreviewPaused = !isSessionActive && !trackInPreview;
     const eyeOk = metrics.eyeContact >= 70;
@@ -95,8 +104,14 @@ const CandidateVideoFeed = forwardRef<WebcamFeedHandle, CandidateVideoFeedProps>
     const handleCalibrate = () => {
       const ok = onCalibratePosture?.();
       if (ok) {
+        if (calibratedTimerRef.current) {
+          clearTimeout(calibratedTimerRef.current);
+        }
         setCalibratedFlash(true);
-        setTimeout(() => setCalibratedFlash(false), 1800);
+        calibratedTimerRef.current = setTimeout(() => {
+          calibratedTimerRef.current = null;
+          setCalibratedFlash(false);
+        }, 1800);
       }
     };
 

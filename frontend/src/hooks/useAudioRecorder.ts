@@ -40,6 +40,7 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mutedRef = useRef(false);
+  const unmountedRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioLevel, setAudioLevel] = useState(0);
 
@@ -79,6 +80,10 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
         noiseSuppression,
       },
     });
+    if (unmountedRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
     stream.getAudioTracks().forEach((track) => {
       track.enabled = !mutedRef.current;
     });
@@ -91,6 +96,11 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
       const ctx = new AudioContextClass();
       if (ctx.state === "suspended") {
         await ctx.resume();
+      }
+      if (unmountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (ctx.state !== "closed") ctx.close().catch(() => {});
+        return;
       }
       const source = ctx.createMediaStreamSource(stream);
       const gainNode = ctx.createGain();
@@ -188,7 +198,13 @@ export function useAudioRecorder(options: AudioRecorderOptions = {}): UseAudioRe
   }, [releaseStream]);
 
   // Release the microphone if the page is closed in the middle of an answer.
-  useEffect(() => cancel, [cancel]);
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      cancel();
+    };
+  }, [cancel]);
 
   return { isRecording, audioLevel, start, stop, cancel, setMuted };
 }

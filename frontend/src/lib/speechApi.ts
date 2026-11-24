@@ -2,6 +2,12 @@
  * Client for the speech backend (Module 2: transcript, Module 5: speech metrics).
  */
 
+export interface SpeechPauseEvent {
+  afterWord: string;
+  atSec: number;
+  lengthSec: number;
+}
+
 export interface SpeechUi {
   wpm: number;
   fillersPerMin: number;
@@ -16,6 +22,26 @@ export interface SpeechUi {
   durationSec: number;
   /** Module 2 clean transcript (filler words removed). Send this to Module 3. */
   transcript: string;
+  /** Raw transcript preserving fillers ("um", "lah", "like") for annotated reports. */
+  rawTranscript?: string;
+  /** Exact long pause positions for inline transcript markers. */
+  pauseEvents?: SpeechPauseEvent[];
+}
+
+export function enrichSpeechUi(res: SpeechAnalysisResponse): SpeechUi {
+  const pauseEvents: SpeechPauseEvent[] = Array.isArray(res.speech_analysis?.long_pauses)
+    ? res.speech_analysis.long_pauses.map((p) => ({
+        afterWord: p.after_word,
+        atSec: p.at_sec,
+        lengthSec: p.length_sec,
+      }))
+    : res.ui.pauseEvents ?? [];
+
+  return {
+    ...res.ui,
+    rawTranscript: res.transcript?.raw_text || res.ui.rawTranscript || res.ui.transcript,
+    pauseEvents,
+  };
 }
 
 export interface SpeechAnalysisResponse {

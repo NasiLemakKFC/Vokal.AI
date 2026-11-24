@@ -1,4 +1,5 @@
 import { extractText } from "unpdf";
+import { getCurrentUser } from "@/lib/auth";
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const MIN_TEXT_CHARS = 40;
@@ -14,6 +15,11 @@ function cleanPdfText(raw: string): string {
 }
 
 export async function POST(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return Response.json({ detail: "Unauthorized", error: "Unauthorized" }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();

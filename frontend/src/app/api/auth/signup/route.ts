@@ -74,6 +74,12 @@ export async function POST(request: Request) {
     setSessionCookie(response, token, expiresAt);
     return response;
   } catch (err) {
+    if ((err as { code?: number })?.code === 11000) {
+      return NextResponse.json(
+        { error: "An account with this email already exists." },
+        { status: 409 }
+      );
+    }
     console.error("[auth/signup]", err);
     return NextResponse.json(
       { error: "Failed to create account. Please try again." },

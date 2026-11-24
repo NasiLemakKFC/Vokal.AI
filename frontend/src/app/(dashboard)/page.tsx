@@ -10,22 +10,14 @@ import {
   type SavedSession,
 } from "@/lib/nlp/sessionStore";
 import { STAR_LABELS, type StarKey, type StarPillar } from "@/lib/nlp/types";
+import { scoreTone, stripTrailingPeriod } from "@/lib/format";
 import { prewarmVisionFileset } from "@/lib/vision/MediaPipeSetup";
 import ScoreRing from "@/components/ui/ScoreRing";
+import ProgressTrendChart, {
+  type TrendPoint,
+} from "@/components/ui/ProgressTrendChart";
 
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
-
-function scoreTone(score: number) {
-  return score >= 80
-    ? "text-[var(--positive)]"
-    : score >= 70
-      ? "text-[var(--warning-ink)]"
-      : "text-[var(--negative)]";
-}
-
-function stripTrailingPeriod(text: string): string {
-  return text.trim().replace(/\.+$/, "");
-}
 
 interface UnifiedHomeSession {
   id: string;
@@ -35,6 +27,7 @@ interface UnifiedHomeSession {
   answerCount: number;
   overall: number;
   starScore: number;
+  deliveryScore: number | null;
   eyeContact: number | null;
   fillersPerMin: number;
   star: Record<StarKey, StarPillar>;
@@ -62,34 +55,47 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
     );
   };
 
-  const firstAns = s.answers[0];
+  const weakestAnswerFor = (key: StarKey) => {
+    if (s.answers.length === 0) return null;
+    let bestIdx = 0;
+    let lowestScore = perAnswer[0]?.starPillarScores[key] ?? 100;
+    for (let i = 1; i < s.answers.length; i++) {
+      const sc = perAnswer[i]?.starPillarScores[key] ?? 100;
+      if (sc < lowestScore) {
+        lowestScore = sc;
+        bestIdx = i;
+      }
+    }
+    return s.answers[bestIdx];
+  };
+
   const star: Record<StarKey, StarPillar> = {
     situation: {
       score: avgPillar("situation"),
       note:
-        firstAns?.analysis.star.situation.suggestion ||
-        firstAns?.analysis.star.situation.explanation ||
+        weakestAnswerFor("situation")?.analysis.star.situation.suggestion ||
+        weakestAnswerFor("situation")?.analysis.star.situation.explanation ||
         "Clarify the project context and constraints",
     },
     task: {
       score: avgPillar("task"),
       note:
-        firstAns?.analysis.star.task.suggestion ||
-        firstAns?.analysis.star.task.explanation ||
+        weakestAnswerFor("task")?.analysis.star.task.suggestion ||
+        weakestAnswerFor("task")?.analysis.star.task.explanation ||
         "State your specific responsibility and success goal",
     },
     action: {
       score: avgPillar("action"),
       note:
-        firstAns?.analysis.star.action.suggestion ||
-        firstAns?.analysis.star.action.explanation ||
+        weakestAnswerFor("action")?.analysis.star.action.suggestion ||
+        weakestAnswerFor("action")?.analysis.star.action.explanation ||
         "Detail the concrete engineering decisions you took",
     },
     result: {
       score: avgPillar("result"),
       note:
-        firstAns?.analysis.star.result.suggestion ||
-        firstAns?.analysis.star.result.explanation ||
+        weakestAnswerFor("result")?.analysis.star.result.suggestion ||
+        weakestAnswerFor("result")?.analysis.star.result.explanation ||
         "Quantify the final outcome with a concrete number or percentage",
     },
   };
@@ -112,7 +118,18 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
         ? `${s.company.trim()} · ${s.role}`
         : s.role;
 
+  // Pick the top coaching recommendation from the lowest-scoring answer across the entire session
+  let lowestAnswerIdx = 0;
+  for (let i = 1; i < perAnswer.length; i++) {
+    if (perAnswer[i].overallScore < perAnswer[lowestAnswerIdx].overallScore) {
+      lowestAnswerIdx = i;
+    }
+  }
+  const firstAns = s.answers[0];
+  const lowestAns = s.answers[lowestAnswerIdx] ?? firstAns;
   const topImprovement =
+    lowestAns?.analysis.llmEvaluation?.topCoaching?.[0] ||
+    lowestAns?.analysis.coaching[0] ||
     firstAns?.analysis.coaching[0] ||
     "Finish your STAR response with a measurable outcome";
 
@@ -124,6 +141,8 @@ function mapSavedToUnified(s: SavedSession): UnifiedHomeSession {
     answerCount: s.answers.length,
     overall: s.overallScore ?? metrics.overallScore,
     starScore: s.starScore ?? metrics.starScore,
+    deliveryScore:
+      s.deliveryScore !== undefined ? s.deliveryScore : metrics.deliveryScore,
     eyeContact: metrics.avgEyeContact,
     fillersPerMin,
     star,
@@ -228,6 +247,15 @@ export default function Home() {
   const fillerDelta = prev
     ? +(last.fillersPerMin - prev.fillersPerMin).toFixed(1)
     : null;
+
+  const trendPoints: TrendPoint[] = unifiedSessions.map((s) => ({
+    id: s.id,
+    dateLabel: s.dateLabel,
+    overall: s.overall,
+    star: s.starScore,
+    delivery: s.deliveryScore,
+    eyeContact: s.eyeContact,
+  }));
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-6">
@@ -347,6 +375,9 @@ export default function Home() {
           </span>
         </div>
       </section>
+
+      {/* Cross-Session Progress Trend Chart (when >= 2 sessions exist) */}
+      <ProgressTrendChart points={trendPoints} />
 
       {/* Recent sessions */}
       <section className="card !p-0 overflow-hidden">

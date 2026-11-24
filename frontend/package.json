@@ -7,13 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:api": "node scripts/test-api.mjs"
+    "test:api": "node scripts/test-api.mjs",
+    "test:unit": "node scripts/test-unit.mjs"
   },
   "dependencies": {
-    "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/tasks-vision": "^1.1.0",
     "framer-motion": "^14.0.0",
-    "lucide-react": "^1.52.0",
     "mongodb": "^7.7.0",
     "next": "^16.4.5",
     "react": "19.3.0",

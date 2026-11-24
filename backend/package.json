@@ -1,0 +1,9 @@
+{
+  "name": "vokal-backend",
+  "private": true,
+  "scripts": {
+    "dev": "venv\\Scripts\\python -m uvicorn main:app --reload --port 8000",
+    "start": "venv\\Scripts\\python -m uvicorn main:app --port 8000",
+    "test": "venv\\Scripts\\python -m unittest test_speech_module.py"
+  }
+}

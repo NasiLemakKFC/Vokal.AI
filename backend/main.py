@@ -60,6 +60,15 @@ def ui_fields(result: dict) -> dict:
         "fluencyScore": sa["fluency_score"],
         "durationSec": transcript["duration_sec"],
         "transcript": transcript["clean_text"],
+        "rawTranscript": transcript["raw_text"],
+        "pauseEvents": [
+            {
+                "afterWord": p.get("after_word", ""),
+                "atSec": p.get("at_sec", 0),
+                "lengthSec": p.get("length_sec", 0),
+            }
+            for p in sa.get("long_pauses", [])
+        ],
     }
 
 

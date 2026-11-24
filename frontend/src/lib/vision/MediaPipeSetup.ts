@@ -279,29 +279,5 @@ export async function initPoseLandmarker(): Promise<PoseLandmarker> {
   }
 }
 
-/**
- * Tears down the FaceLandmarker and frees GPU/WASM resources.
- */
-export function destroyFaceLandmarker(): void {
-  if (faceLandmarkerInstance) {
-    faceLandmarkerInstance.close();
-    faceLandmarkerInstance = null;
-    faceLandmarkerPromise = null;
-    console.log("[MediaPipe] FaceLandmarker destroyed");
-  }
-}
-
-/**
- * Tears down the PoseLandmarker and frees GPU/WASM resources.
- */
-export function destroyPoseLandmarker(): void {
-  if (poseLandmarkerInstance) {
-    poseLandmarkerInstance.close();
-    poseLandmarkerInstance = null;
-    poseLandmarkerPromise = null;
-    console.log("[MediaPipe] PoseLandmarker destroyed");
-  }
-}
-
 // Re-export result types so consumers don't need to import from @mediapipe/tasks-vision directly.
 export type { FaceLandmarkerResult, PoseLandmarkerResult, NormalizedLandmark };

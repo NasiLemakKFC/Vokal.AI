@@ -1,20 +1,27 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { extractJobDescriptionKeywords } from "@/lib/nlp/keywords";
+import type { SetupPreset } from "@/lib/interview/presets";
 import {
+  EXPERIENCE_LEVELS,
   INTERVIEW_ROLES,
+  QUESTION_COUNT_OPTIONS,
   type AiProviderUsed,
+  type ExperienceLevel,
   type InterviewQuestion,
   type InterviewQuestionType,
   type InterviewTarget,
   type InterviewTargetMode,
+  type QuestionCountOption,
   type ResumeTailorReport,
 } from "@/lib/interview/types";
 
 export interface SessionSetupCardProps {
   target: InterviewTarget;
   onTargetChange: (next: InterviewTarget) => void;
+  questionCount: QuestionCountOption;
+  onQuestionCountChange: (count: QuestionCountOption) => void;
   resumeText: string;
   resumeFileName: string | null;
   onResumeChange: (text: string, fileName: string | null) => void;
@@ -38,6 +45,12 @@ export interface SessionSetupCardProps {
   onToggleExpanded: () => void;
   onGenerate: (options?: { forceRegenerate?: boolean }) => void;
   onResetDefaults: () => void;
+  presets: SetupPreset[];
+  activePresetId: string | null;
+  onSavePreset: (customName?: string) => void;
+  onLoadPreset: (preset: SetupPreset) => void;
+  onDeletePreset: (id: string) => void;
+  onClearSetup: () => void;
 }
 
 const PROVIDER_LABELS: Record<AiProviderUsed, string> = {
@@ -71,6 +84,8 @@ function targetSummaryLabel(target: InterviewTarget): string {
 export default function SessionSetupCard({
   target,
   onTargetChange,
+  questionCount,
+  onQuestionCountChange,
   resumeText,
   resumeFileName,
   onResumeChange,
@@ -90,6 +105,12 @@ export default function SessionSetupCard({
   onToggleExpanded,
   onGenerate,
   onResetDefaults,
+  presets,
+  activePresetId,
+  onSavePreset,
+  onLoadPreset,
+  onDeletePreset,
+  onClearSetup,
 }: SessionSetupCardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [resumeTab, setResumeTab] = useState<"pdf" | "paste">("pdf");
@@ -97,9 +118,20 @@ export default function SessionSetupCard({
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfPageCount, setPdfPageCount] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [justSavedPreset, setJustSavedPreset] = useState(false);
   const [pendingAction, setPendingAction] = useState<
-    null | { kind: "generate"; forceRegenerate: boolean } | { kind: "reset" }
+    | null
+    | { kind: "generate"; forceRegenerate: boolean }
+    | { kind: "reset" }
+    | { kind: "clear" }
+    | { kind: "load_preset"; preset: SetupPreset }
   >(null);
+
+  useEffect(() => {
+    if (!justSavedPreset) return;
+    const t = window.setTimeout(() => setJustSavedPreset(false), 1800);
+    return () => window.clearTimeout(t);
+  }, [justSavedPreset]);
 
   const jdKeywords = useMemo(
     () =>
@@ -110,6 +142,9 @@ export default function SessionSetupCard({
   );
 
   const hasResume = resumeText.trim().length > 0;
+  const hasAnySetupInputs = Boolean(
+    target.company.trim() || target.jobDescription.trim() || hasResume
+  );
   const resumeWordCount = hasResume ? resumeText.trim().split(/\s+/).length : 0;
 
   const updateTarget = (patch: Partial<InterviewTarget>) => {
@@ -190,14 +225,52 @@ export default function SessionSetupCard({
     onResetDefaults();
   };
 
+  const triggerClearSetup = () => {
+    if (disabled || isGenerating || isParsingPdf) return;
+    if (hasRecordedDrafts) {
+      setPendingAction({ kind: "clear" });
+      return;
+    }
+    setPendingAction(null);
+    setPdfError(null);
+    setPdfPageCount(null);
+    onClearSetup();
+  };
+
+  const triggerLoadPreset = (preset: SetupPreset) => {
+    if (disabled || isGenerating || isParsingPdf) return;
+    if (hasRecordedDrafts) {
+      setPendingAction({ kind: "load_preset", preset });
+      return;
+    }
+    setPendingAction(null);
+    setPdfError(null);
+    setPdfPageCount(null);
+    onLoadPreset(preset);
+  };
+
+  const handleSaveCurrentPreset = () => {
+    if (disabled || isGenerating || !hasAnySetupInputs) return;
+    onSavePreset();
+    setJustSavedPreset(true);
+  };
+
   const confirmPendingAction = () => {
     if (!pendingAction) return;
     const action = pendingAction;
     setPendingAction(null);
     if (action.kind === "generate") {
       onGenerate({ forceRegenerate: action.forceRegenerate });
-    } else {
+    } else if (action.kind === "reset") {
       onResetDefaults();
+    } else if (action.kind === "clear") {
+      setPdfError(null);
+      setPdfPageCount(null);
+      onClearSetup();
+    } else if (action.kind === "load_preset") {
+      setPdfError(null);
+      setPdfPageCount(null);
+      onLoadPreset(action.preset);
     }
   };
 
@@ -254,6 +327,77 @@ export default function SessionSetupCard({
 
       {isExpanded && (
         <div className="border-t border-[var(--border)] p-4 space-y-4">
+          {/* Saved Presets Bar (browser-local, instant switching across 3Q/5Q/7Q) */}
+          <div className="rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--raised)]/50 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
+              <span className="text-[12px] font-medium text-[var(--muted)] mr-1 shrink-0">
+                Saved setups
+              </span>
+              {presets.length === 0 ? (
+                <span className="text-[12px] text-[var(--subtle)]">
+                  Save a JD + resume to reuse it across 3Q, 5Q, or 7Q drills
+                </span>
+              ) : (
+                presets.map((preset) => {
+                  const isActive = preset.id === activePresetId;
+                  return (
+                    <div
+                      key={preset.id}
+                      className={`inline-flex items-center rounded-[var(--radius-control)] border text-[12px] transition-colors ${
+                        isActive
+                          ? "border-[var(--border-accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]"
+                          : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        disabled={disabled || isGenerating}
+                        onClick={() => triggerLoadPreset(preset)}
+                        title={`Load "${preset.name}" (${preset.questionCount}Q)`}
+                        className="h-7 pl-2.5 pr-1.5 font-medium truncate max-w-[200px] cursor-pointer disabled:opacity-50"
+                      >
+                        {preset.name}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        aria-label={`Delete preset ${preset.name}`}
+                        title="Delete preset"
+                        onClick={() => onDeletePreset(preset.id)}
+                        className="h-7 px-1.5 text-[var(--muted)] hover:text-[var(--negative)] cursor-pointer disabled:opacity-50 flex items-center"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          close
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              type="button"
+              disabled={disabled || isGenerating || !hasAnySetupInputs}
+              onClick={handleSaveCurrentPreset}
+              title={
+                hasAnySetupInputs
+                  ? "Save current target, JD, and resume in this browser"
+                  : "Enter a company, job description, or resume first"
+              }
+              className={`h-7 px-2.5 rounded-[var(--radius-control)] border text-[12px] font-medium flex items-center gap-1 cursor-pointer transition-colors shrink-0 disabled:opacity-45 disabled:cursor-not-allowed ${
+                justSavedPreset
+                  ? "border-[var(--pill-positive-border)] bg-[var(--pill-positive-bg)] text-[var(--pill-positive-ink)]"
+                  : "border-[var(--control)] bg-[var(--surface)] hover:bg-[var(--raised)] text-[var(--text)]"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {justSavedPreset ? "check" : "bookmark_add"}
+              </span>
+              {justSavedPreset ? "Saved" : "Save setup"}
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
             {/* Left Column: Job Target */}
             <div className="lg:col-span-6 space-y-3 rounded-[var(--radius-card)] border border-[var(--border)] bg-[var(--raised)]/50 p-4">
@@ -264,6 +408,81 @@ export default function SessionSetupCard({
                 <p className="text-[12px] text-[var(--muted)] mt-0.5">
                   Tailors questions and keyword feedback for your target role
                 </p>
+              </div>
+
+              {/* Session length & experience level */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <span className="text-[12px] font-medium text-[var(--text-secondary)] block">
+                    Session length
+                  </span>
+                  <div
+                    role="group"
+                    aria-label="Number of interview questions"
+                    className="grid grid-cols-3 gap-1 rounded-[var(--radius-control)] bg-[var(--active)]/80 p-1"
+                  >
+                    {QUESTION_COUNT_OPTIONS.map((opt) => {
+                      const active = questionCount === opt.count;
+                      return (
+                        <button
+                          key={opt.count}
+                          type="button"
+                          disabled={disabled}
+                          title={`${opt.count} questions · ${opt.label} (${opt.durationHint})`}
+                          onClick={() => {
+                            setPendingAction(null);
+                            onQuestionCountChange(opt.count);
+                          }}
+                          className={`py-1.5 px-2 rounded-[calc(var(--radius-control)-2px)] text-center transition-colors cursor-pointer disabled:opacity-50 ${
+                            active
+                              ? "bg-[var(--surface)] text-[var(--accent-ink)]"
+                              : "text-[var(--muted)] hover:text-[var(--text)]"
+                          }`}
+                        >
+                          <div className="text-[12px] font-medium font-mono tabular-nums leading-tight">
+                            {opt.count}Q
+                          </div>
+                          <div className="text-[10px] opacity-80 leading-tight mt-0.5 truncate">
+                            {opt.durationHint}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[12px] font-medium text-[var(--text-secondary)] block">
+                    Experience level
+                  </span>
+                  <div
+                    role="group"
+                    aria-label="Candidate experience level"
+                    className="grid grid-cols-3 gap-1 rounded-[var(--radius-control)] bg-[var(--active)]/80 p-1"
+                  >
+                    {EXPERIENCE_LEVELS.map((lvl) => {
+                      const currentLevel: ExperienceLevel =
+                        target.experienceLevel ?? "fresh_grad";
+                      const active = currentLevel === lvl.value;
+                      return (
+                        <button
+                          key={lvl.value}
+                          type="button"
+                          disabled={disabled}
+                          title={lvl.label}
+                          onClick={() => updateTarget({ experienceLevel: lvl.value })}
+                          className={`py-1.5 px-1.5 rounded-[calc(var(--radius-control)-2px)] text-[11px] font-medium transition-colors cursor-pointer disabled:opacity-50 truncate ${
+                            active
+                              ? "bg-[var(--surface)] text-[var(--accent-ink)]"
+                              : "text-[var(--muted)] hover:text-[var(--text)]"
+                          }`}
+                        >
+                          {lvl.shortLabel}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
 
               {/* Mode Selector */}
@@ -340,11 +559,23 @@ export default function SessionSetupCard({
                           (paste JD requirements)
                         </span>
                       </label>
-                      {jdKeywords.length > 0 && (
-                        <span className="text-[12px] font-medium text-[var(--accent-ink)] font-mono tabular-nums">
-                          {jdKeywords.length} skills detected
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2.5">
+                        {jdKeywords.length > 0 && (
+                          <span className="text-[12px] font-medium text-[var(--accent-ink)] font-mono tabular-nums">
+                            {jdKeywords.length} skills detected
+                          </span>
+                        )}
+                        {target.jobDescription.trim().length > 0 && (
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => updateTarget({ jobDescription: "" })}
+                            className="text-[12px] font-medium text-[var(--negative)] hover:underline cursor-pointer disabled:opacity-50"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <textarea
                       id="setup-jd-input"
@@ -391,7 +622,7 @@ export default function SessionSetupCard({
                     </span>
                   </h2>
                   <p className="text-[12px] text-[var(--muted)] mt-0.5">
-                    Stays in session memory only — checks JD alignment &amp; probes real projects
+                    Saved locally in your browser only — never stored permanently on our server
                   </p>
                 </div>
                 <div className="flex gap-1 rounded-[var(--radius-control)] bg-[var(--active)]/80 p-1">
@@ -600,6 +831,17 @@ export default function SessionSetupCard({
                   Use default questions
                 </button>
               )}
+
+              {(hasAnySetupInputs || isTailored) && (
+                <button
+                  type="button"
+                  disabled={disabled || isGenerating || isParsingPdf}
+                  onClick={triggerClearSetup}
+                  className="h-9 px-3 rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--pill-negative-bg)] hover:border-[var(--pill-negative-border)] text-[13px] font-medium text-[var(--muted)] hover:text-[var(--negative)] cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  Clear JD &amp; resume
+                </button>
+              )}
             </div>
 
             {generateError && (
@@ -630,7 +872,11 @@ export default function SessionSetupCard({
                   onClick={confirmPendingAction}
                   className="h-8 px-3 rounded-[var(--radius-control)] bg-[var(--warning-ink)] text-white text-[12px] font-medium cursor-pointer"
                 >
-                  Replace questions
+                  {pendingAction.kind === "clear"
+                    ? "Clear & reset"
+                    : pendingAction.kind === "load_preset"
+                      ? "Load preset"
+                      : "Replace questions"}
                 </button>
               </div>
             </div>
@@ -756,7 +1002,7 @@ export default function SessionSetupCard({
                 <p className="text-[12px] font-medium text-[var(--muted)]">
                   Generated practice questions ({questions.length})
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {questions.map((q, idx) => {
                     const isActive = idx === activeQuestionIndex;
                     return (

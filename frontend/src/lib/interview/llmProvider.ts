@@ -325,7 +325,7 @@ export function normalizeAiPayload(
       : `Your resume demonstrates ${matchedPreview} (${matchScore ?? 0}% verified alignment).`;
   }
 
-  const targetCount = Math.max(3, Math.min(5, Math.round(input.questionCount ?? 3)));
+  const targetCount = Math.max(3, Math.min(7, Math.round(input.questionCount ?? 5)));
   const questionCandidate = [
     parsed.questions,
     parsed.interviewQuestions,
@@ -418,8 +418,17 @@ export function normalizeAiPayload(
   };
 }
 
+const LEVEL_GUIDANCE: Record<string, string> = {
+  internship:
+    "Internship (LI) candidate — anchor questions to university coursework, FYP, hackathons, lab projects, learning agility, and teamwork.",
+  fresh_grad:
+    "Fresh graduate candidate — balance FYP/internship depth, engineering fundamentals, collaboration, and ownership.",
+  junior:
+    "Junior (1–2 years experience) candidate — expect production ownership, debugging trade-offs, code quality, and cross-team delivery.",
+};
+
 function buildPrompts(input: PrepareInterviewRequest): { system: string; user: string } {
-  const questionCount = Math.max(3, Math.min(5, Math.round(input.questionCount ?? 3)));
+  const questionCount = Math.max(3, Math.min(7, Math.round(input.questionCount ?? 5)));
   const compactJd =
     input.mode === "general" ? "" : compactForPrompt(input.jobDescription, MAX_JD_CHARS);
   const compactResume = compactForPrompt(input.resumeText, MAX_RESUME_CHARS);
@@ -427,20 +436,32 @@ function buildPrompts(input: PrepareInterviewRequest): { system: string; user: s
   const hasJd = compactJd.length > 0;
   const targetRole = input.mode === "general" ? "General Behavioral" : input.role || "Software Engineer";
   const company = input.mode === "company" ? input.company.trim() : "";
+  const levelKey = input.experienceLevel ?? "fresh_grad";
+  const levelInstruction = LEVEL_GUIDANCE[levelKey] ?? LEVEL_GUIDANCE.fresh_grad;
+
+  const arcGuidance =
+    questionCount >= 7
+      ? "Follow a complete 7-question interview arc: (1) resume/project deep-dive, (2) JD skill-gap or learning agility, (3) core technical problem-solving, (4) teamwork or resolving disagreement, (5) ownership under tight deadline/ambiguity, (6) architecture/quality trade-off or initiative, (7) setback recovery & reflection."
+      : questionCount >= 5
+        ? "Follow a balanced 5-question interview arc: (1) resume/project deep-dive, (2) JD skill-gap or learning agility, (3) core role technical problem-solving, (4) teamwork or conflict resolution, (5) ownership under deadline or process improvement."
+        : "Keep the 3 questions high-signal and distinct: core technical problem-solving, gap/learning agility, and collaboration/ownership.";
 
   const questionMixRule =
     hasResume && hasJd
       ? [
-          `- questions: return EXACTLY ${questionCount} behavioral STAR question objects (with non-empty "prompt" and 4-5 "keywords" each) using this exact mix:`,
+          `- questions: return EXACTLY ${questionCount} distinct behavioral STAR question objects (non-empty "prompt" and 4-5 "keywords" each) using this mix:`,
           `  1) Q1 MUST have type "resume_deep_dive" and explicitly name a specific project, internship, or metric from <candidate_resume>.`,
           `  2) Q2 MUST have type "jd_gap" and explicitly name 1-2 missing skills from missingSkills (present in <job_description> but absent from <candidate_resume>) to test ramp-up or bridging the gap.`,
-          `  3) Q3+ MUST have type "role_behavioral" anchored to core <job_description> responsibilities${company ? ` at ${company}` : ""}.`,
+          questionCount >= 7
+            ? `  3) Include one more "resume_deep_dive" (a DIFFERENT project from Q1) and fill remaining slots with "role_behavioral" anchored to core <job_description> responsibilities${company ? ` at ${company}` : ""}.`
+            : `  3) Q3+ MUST have type "role_behavioral" anchored to core <job_description> responsibilities${company ? ` at ${company}` : ""}.`,
+          `  4) ${arcGuidance}`,
         ].join("\n")
       : hasResume
-        ? `- questions: return EXACTLY ${questionCount} behavioral STAR question objects (with non-empty "prompt" and 4-5 "keywords" each): Q1 MUST have type "resume_deep_dive" naming a specific project/internship from <candidate_resume>; Q2 should use type "jd_gap" if missingSkills is non-empty (else "role_behavioral"); Q3+ MUST have type "role_behavioral" tailored to ${targetRole}.`
+        ? `- questions: return EXACTLY ${questionCount} distinct behavioral STAR question objects (non-empty "prompt" and 4-5 "keywords" each): Q1 MUST have type "resume_deep_dive" naming a specific project/internship from <candidate_resume>; Q2 should use type "jd_gap" if missingSkills is non-empty (else "role_behavioral"); Q3+ MUST have type "role_behavioral" tailored to ${targetRole}. ${arcGuidance}`
         : hasJd
-          ? `- questions: return EXACTLY ${questionCount} behavioral STAR question objects (type "role_behavioral", non-empty "prompt", 4-5 "keywords" each) anchored directly to specific skills and responsibilities in <job_description>.`
-          : `- questions: return EXACTLY ${questionCount} role-specific STAR behavioral question objects (type "role_behavioral", non-empty "prompt", 4-5 "keywords" each) tailored to ${targetRole}.`;
+          ? `- questions: return EXACTLY ${questionCount} distinct behavioral STAR question objects (type "role_behavioral", non-empty "prompt", 4-5 "keywords" each) anchored directly to specific skills and responsibilities in <job_description>. ${arcGuidance}`
+          : `- questions: return EXACTLY ${questionCount} distinct role-specific STAR behavioral question objects (type "role_behavioral", non-empty "prompt", 4-5 "keywords" each) tailored to ${targetRole}. ${arcGuidance}`;
 
   const system = [
     "You are an interview coach for Malaysian university CS/IT graduates.",
@@ -459,6 +480,7 @@ function buildPrompts(input: PrepareInterviewRequest): { system: string; user: s
     "  ]",
     "}",
     "Rules: Be strictly factual and concise.",
+    `- Candidate Level: ${levelInstruction}`,
     "- ONLY inspect <candidate_resume> for candidate skills/projects. NEVER attribute <job_description> requirements (e.g. Docker, CI/CD, Redis) to the candidate unless explicitly written in <candidate_resume>.",
     '- matchedSkills: ONLY skills explicitly present in BOTH <candidate_resume> and <job_description>. missingSkills: distinct <job_description> skills absent from <candidate_resume> (no duplicates like both "Redis" and "Redis caching").',
     "- If <candidate_resume> is empty, set matchScore=null, verdict='Role Prep', matchedSkills=[], and put target skills in missingSkills.",
@@ -469,6 +491,7 @@ function buildPrompts(input: PrepareInterviewRequest): { system: string; user: s
   const lines = [
     `Mode: ${input.mode}`,
     `Target Role: ${targetRole}`,
+    `Experience Level: ${levelKey}`,
     company ? `Company: ${company}` : null,
     `Questions Needed: ${questionCount}`,
     input.variation
@@ -501,11 +524,31 @@ async function readHttpErrorDetail(res: Response): Promise<string> {
   return "";
 }
 
+export interface ResolvedLlmProvider {
+  provider: AiProviderUsed;
+  model: string;
+  apiKey?: string;
+  baseUrl?: string;
+  reason?: string;
+}
+
+export interface CallLlmJsonOptions {
+  prompts: { system: string; user: string };
+  temperature: number;
+  maxTokens: number;
+  groqJsonSchema?: {
+    name: string;
+    schema: Record<string, unknown>;
+  };
+}
+
 async function callGroq(
   prompts: { system: string; user: string },
   apiKey: string,
   model: string,
-  temperature: number
+  temperature: number,
+  maxTokens: number,
+  groqJsonSchema?: { name: string; schema: Record<string, unknown> }
 ): Promise<string> {
   const isGptOss = /gpt-oss/i.test(model);
   const payload: Record<string, unknown> = {
@@ -514,18 +557,19 @@ async function callGroq(
       { role: "system", content: prompts.system },
       { role: "user", content: prompts.user },
     ],
-    response_format: isGptOss
-      ? {
-          type: "json_schema",
-          json_schema: {
-            name: "interview_preparation",
-            strict: true,
-            schema: INTERVIEW_PREP_JSON_SCHEMA,
-          },
-        }
-      : { type: "json_object" },
+    response_format:
+      isGptOss && groqJsonSchema
+        ? {
+            type: "json_schema",
+            json_schema: {
+              name: groqJsonSchema.name,
+              strict: true,
+              schema: groqJsonSchema.schema,
+            },
+          }
+        : { type: "json_object" },
     temperature,
-    max_completion_tokens: 1800,
+    max_completion_tokens: maxTokens,
   };
   if (isGptOss) {
     payload.reasoning_effort = "low";
@@ -538,7 +582,7 @@ async function callGroq(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(25_000),
   });
   if (!res.ok) {
     const detail = await readHttpErrorDetail(res);
@@ -556,7 +600,8 @@ async function callGemini(
   prompts: { system: string; user: string },
   apiKey: string,
   model: string,
-  temperature: number
+  temperature: number,
+  maxTokens: number
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
@@ -573,10 +618,10 @@ async function callGemini(
       generationConfig: {
         responseMimeType: "application/json",
         temperature,
-        maxOutputTokens: 900,
+        maxOutputTokens: maxTokens,
       },
     }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
     const detail = await readHttpErrorDetail(res);
@@ -594,7 +639,8 @@ async function callOllama(
   prompts: { system: string; user: string },
   baseUrl: string,
   model: string,
-  temperature: number
+  temperature: number,
+  maxTokens: number
 ): Promise<string> {
   const endpoint = `${baseUrl.replace(/\/+$/, "")}/api/chat`;
   const res = await fetch(endpoint, {
@@ -608,9 +654,9 @@ async function callOllama(
       ],
       stream: false,
       format: "json",
-      options: { temperature, num_predict: 850 },
+      options: { temperature, num_predict: maxTokens },
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(35_000),
   });
   if (!res.ok) {
     throw new Error(`Ollama HTTP ${res.status}`);
@@ -621,13 +667,7 @@ async function callOllama(
   return content;
 }
 
-function resolveProvider(): {
-  provider: AiProviderUsed;
-  model: string;
-  apiKey?: string;
-  baseUrl?: string;
-  reason?: string;
-} {
+export function resolveLlmProvider(): ResolvedLlmProvider {
   const configured = (process.env.AI_PROVIDER ?? "auto").trim().toLowerCase();
   const groqKey = process.env.GROQ_API_KEY;
   const groqModel = process.env.GROQ_MODEL?.trim() || "openai/gpt-oss-20b";
@@ -682,10 +722,45 @@ function resolveProvider(): {
   };
 }
 
+export async function invokeLlmJson(
+  resolved: ResolvedLlmProvider,
+  options: CallLlmJsonOptions
+): Promise<string> {
+  if (resolved.provider === "groq") {
+    return callGroq(
+      options.prompts,
+      resolved.apiKey!,
+      resolved.model,
+      options.temperature,
+      options.maxTokens,
+      options.groqJsonSchema
+    );
+  }
+  if (resolved.provider === "gemini") {
+    return callGemini(
+      options.prompts,
+      resolved.apiKey!,
+      resolved.model,
+      options.temperature,
+      options.maxTokens
+    );
+  }
+  if (resolved.provider === "ollama") {
+    return callOllama(
+      options.prompts,
+      resolved.baseUrl!,
+      resolved.model,
+      options.temperature,
+      options.maxTokens
+    );
+  }
+  throw new Error("Offline provider cannot execute LLM JSON request.");
+}
+
 export async function generateInterviewPreparation(
   input: PrepareInterviewRequest
 ): Promise<PrepareInterviewResponse> {
-  const resolved = resolveProvider();
+  const resolved = resolveLlmProvider();
 
   if (resolved.provider === "offline") {
     return {
@@ -696,18 +771,27 @@ export async function generateInterviewPreparation(
     };
   }
 
+  const questionCount = Math.max(3, Math.min(7, Math.round(input.questionCount ?? 5)));
   const prompts = buildPrompts(input);
   const temperature = input.variation ? 0.4 : 0.2;
+  // Scale output budget dynamically so 5Q and 7Q JSON payloads never truncate mid-object
+  const maxTokens =
+    resolved.provider === "groq"
+      ? Math.max(1800, questionCount * 380)
+      : resolved.provider === "gemini"
+        ? Math.max(1100, questionCount * 350)
+        : Math.max(1000, questionCount * 310);
 
   try {
-    let rawJson = "";
-    if (resolved.provider === "groq") {
-      rawJson = await callGroq(prompts, resolved.apiKey!, resolved.model, temperature);
-    } else if (resolved.provider === "gemini") {
-      rawJson = await callGemini(prompts, resolved.apiKey!, resolved.model, temperature);
-    } else if (resolved.provider === "ollama") {
-      rawJson = await callOllama(prompts, resolved.baseUrl!, resolved.model, temperature);
-    }
+    const rawJson = await invokeLlmJson(resolved, {
+      prompts,
+      temperature,
+      maxTokens,
+      groqJsonSchema: {
+        name: "interview_preparation",
+        schema: INTERVIEW_PREP_JSON_SCHEMA,
+      },
+    });
 
     const normalized = normalizeAiPayload(rawJson, input);
     return {
